@@ -98,17 +98,19 @@ Everything works with **no keys** (simulate mode). Add keys to go live:
 
 ## Deploy to Vercel
 
-One-click (asks for the env vars during setup):
+Use the **Import** flow (not "Clone Template" — this repo is private, and the
+clone flow tries to create a new repo and stalls):
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/leandromosso17-ui/leandro-s/tree/claude/medication-tracker-hackathon-h0hhpw&env=ELEVENLABS_API_KEY,TWILIO_ACCOUNT_SID,TWILIO_AUTH_TOKEN,TWILIO_FROM_NUMBER)
+1. Go to <https://vercel.com/new> and select your Vercel team in the top-left.
+2. Under **Import Git Repository**, find **`leandromosso17-ui/Leandro-s`** and
+   click **Import**. (If it's not listed, use the account dropdown / "Adjust
+   GitHub App Permissions" and grant access to that GitHub account.)
+3. It auto-detects **Next.js** — leave the build settings default.
+4. Expand **Environment Variables** and add the ones from the table above (all
+   optional — the app runs without them in simulate mode). Then **Deploy**.
 
-Or manually:
-1. Push this branch to GitHub (already done).
-2. On <https://vercel.com/new>, **Import** the repo → it auto-detects Next.js.
-3. Add the env vars from the table above (all optional — the app runs without
-   them in simulate mode).
-4. Deploy. The call audio URL is auto-detected; set `PUBLIC_BASE_URL` only if
-   Twilio can't reach `/api/twiml`.
+The call audio URL is auto-detected; set `PUBLIC_BASE_URL` only if Twilio can't
+reach `/api/twiml`.
 
 ## First run
 
