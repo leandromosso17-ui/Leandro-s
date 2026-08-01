@@ -29,22 +29,31 @@ out of pills unexpectedly.
   time.
 - **Scan prescription** 📷 — snap a photo of a prescription and the meds,
   doses, schedule and pill counts are added to the dashboard automatically.
-  (In this MVP the scan returns a pre-baked sample so the demo is reliable;
-  the code is structured to drop in a real vision model.)
+  Pick the photo **from your gallery / files**. (In this MVP the scan returns a
+  pre-baked sample so the demo is reliable; the code is structured to drop in a
+  real vision model.)
 - **Add manually** — full form to add a medication (dose, schedule, stock,
   box size, icon, instructions).
 - **Live stock tracking** — every confirmed dose decrements inventory, and
   the run-out prediction updates automatically.
 
 ### 📞 The reminder escalation
-1. **SMS first** — 15 minutes before a dose (an SMS banner in the demo).
-2. **Phone call** — if the dose isn't registered within 30 minutes, MedGuard
-   "calls" Massimo and a **real ElevenLabs voice** tells him which pill to take.
+For a dose scheduled at **12:00**:
+1. **SMS at 11:45** (−15 min) — *"Ciao Massimo, don't forget to take XYZ. Have a
+   great day."*
+2. **Phone call at 12:05** (+5 min) — only if the dose still isn't marked taken.
+   The call is voiced by a **real ElevenLabs voice** (Twilio dials, ElevenLabs
+   speaks). Both offsets are configurable in **⚙️ Settings**.
 
-In **demo mode** these timers are compressed to seconds so you can show the
-whole chain live. Trigger it from Lorenzo's dashboard (**Remind**) or from the
-demo button on Massimo's screen — open the two pages in separate tabs/devices
-and the reminder jumps from one to the other.
+**Two modes**, toggled in Settings:
+- **Simulate** (default) — the SMS + call appear on Massimo's screen. No
+  accounts needed, perfect for offline demos. Open Lorenzo and Massimo in two
+  tabs/devices and the reminder jumps from one to the other.
+- **Twilio** — real SMS and a real phone call to Massimo's number.
+
+**Automatic reminders** (Settings toggle) fire at the real clock times while
+Lorenzo's dashboard stays open. For a quick stage demo, the **Remind** button
+and Massimo's demo button run the whole chain immediately (call in ~8s).
 
 ---
 
@@ -60,16 +69,35 @@ and the reminder jumps from one to the other.
 
 ```bash
 npm install
-cp .env.example .env.local   # add your ELEVENLABS_API_KEY (optional)
+cp .env.example .env.local   # add keys (all optional — see below)
 npm run dev
 ```
 
 Open <http://localhost:3000> and pick **Lorenzo** or **Massimo**.
 
+Everything works with **no keys** (simulate mode). Add keys to go live:
+
+| To enable | Set |
+|---|---|
+| Real ElevenLabs call voice | `ELEVENLABS_API_KEY` (+ optional `ELEVENLABS_VOICE_ID`) |
+| Real SMS + phone calls | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` |
+
+### Twilio (free trial works)
+1. Sign up at <https://www.twilio.com/try-twilio> — free credit + a phone number.
+2. **Verify Massimo's number** (trial can only text/call verified numbers).
+3. Put the Account SID, Auth Token and Twilio number in your env.
+4. In the app: **⚙️ Settings** → enter Massimo's phone, tick **Use Twilio**,
+   and hit **Send test SMS** / **Test call**.
+
+> The **call** needs a public URL for Twilio to fetch the ElevenLabs audio, so
+> place calls from the **deployed** app (Vercel), or tunnel localhost with ngrok
+> and set `PUBLIC_BASE_URL`. SMS works from anywhere.
+
 ## Deploy
 
-Deploys to **Vercel** as-is. Add `ELEVENLABS_API_KEY` (and optionally
-`ELEVENLABS_VOICE_ID`) as environment variables in the project settings.
+Deploys to **Vercel** as-is. Add the env vars above in project settings. The
+call audio URL is auto-detected from the request; set `PUBLIC_BASE_URL` only if
+needed.
 
 ## Demo script (2 minutes)
 

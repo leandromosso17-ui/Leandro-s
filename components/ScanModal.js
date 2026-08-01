@@ -60,17 +60,16 @@ export default function ScanModal({ open, onClose, onAddMeds }) {
         {step === "capture" && (
           <div className="mt-4">
             <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center transition hover:border-brand-400 hover:bg-brand-50">
-              <span className="text-5xl">🧾</span>
+              <span className="text-5xl">🖼️</span>
               <span className="mt-3 font-semibold text-slate-700">
-                Take a photo of the prescription
+                Choose a prescription photo
               </span>
               <span className="mt-1 text-sm text-slate-400">
-                or tap to choose an image
+                from your gallery / files
               </span>
               <input
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={handleFile}
               />

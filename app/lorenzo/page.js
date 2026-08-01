@@ -13,7 +13,9 @@ import {
 } from "@/lib/store";
 import AddMedModal from "@/components/AddMedModal";
 import ScanModal from "@/components/ScanModal";
-import { sendReminderSignal } from "@/lib/reminder";
+import SettingsModal from "@/components/SettingsModal";
+import { runReminderNow } from "@/lib/notify";
+import { useAutoReminders } from "@/lib/useAutoReminders";
 
 function stockTone(days) {
   if (days <= 5) return { bar: "bg-rose-500", text: "text-rose-600", chip: "bg-rose-50 text-rose-700" };
@@ -22,11 +24,24 @@ function stockTone(days) {
 }
 
 export default function LorenzoPage() {
-  const { ready, state, addMed, addMedsFromScan, removeMed, resetDemo } = useStore();
+  const {
+    ready,
+    state,
+    settings,
+    demoSpeed,
+    addMed,
+    addMedsFromScan,
+    removeMed,
+    updateSettings,
+    resetDemo,
+  } = useStore();
   const doses = useTodaysDoses();
   const [showAdd, setShowAdd] = useState(false);
   const [showScan, setShowScan] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState(null);
+
+  useAutoReminders(doses, settings);
 
   const flash = (msg) => {
     setToast(msg);
@@ -56,14 +71,22 @@ export default function LorenzoPage() {
           <Link href="/" className="text-sm text-brand-100">
             ← Home
           </Link>
-          <button
-            onClick={() => {
-              if (confirm("Reset demo data?")) resetDemo();
-            }}
-            className="text-xs text-brand-200 underline"
-          >
-            reset demo
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-xs font-semibold text-white/90 underline"
+            >
+              ⚙️ Settings
+            </button>
+            <button
+              onClick={() => {
+                if (confirm("Reset demo data?")) resetDemo();
+              }}
+              className="text-xs text-brand-200 underline"
+            >
+              reset demo
+            </button>
+          </div>
         </div>
         <div className="mt-3 flex items-center gap-2">
           <span className="text-2xl">🛡️</span>
@@ -71,6 +94,13 @@ export default function LorenzoPage() {
         </div>
         <p className="mt-1 text-brand-100">
           Managing <b>Massimo's</b> medication · {state.meds.length} active meds
+        </p>
+        <p className="mt-1 text-xs text-brand-200">
+          Reminders:{" "}
+          {settings.useTwilio && settings.massimoPhone
+            ? `📞 Twilio → ${settings.massimoPhone}`
+            : "🖥️ simulated on Massimo's screen"}
+          {settings.autoReminders ? " · auto ON" : ""}
         </p>
 
         <div className="mt-5 flex gap-3">
@@ -121,15 +151,25 @@ export default function LorenzoPage() {
                   </div>
                   <button
                     onClick={() => {
-                      sendReminderSignal({
-                        medId: d.med.id,
-                        time: d.time,
-                        medName: d.med.name,
-                        dosage: d.med.dosage,
-                        patient: "Massimo",
+                      runReminderNow({
+                        settings,
+                        dose: d,
+                        demoSpeed,
                         from: "Lorenzo",
+                        patient: "Massimo",
+                        onStage: (stage, r) => {
+                          if (stage === "call" && r?.real && !r.ok) {
+                            flash(`Call failed: ${r.data?.detail || r.data?.error || "check Twilio"}`);
+                          } else if (stage === "call") {
+                            flash(`📞 Calling Massimo about ${d.med.name}`);
+                          }
+                        },
                       });
-                      flash(`Reminder sent to Massimo for ${d.med.name}`);
+                      flash(
+                        settings.useTwilio && settings.massimoPhone
+                          ? `SMS sent to Massimo for ${d.med.name}`
+                          : `Reminder shown on Massimo's screen for ${d.med.name}`
+                      );
                     }}
                     className="rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"
                   >
@@ -252,6 +292,12 @@ export default function LorenzoPage() {
         open={showScan}
         onClose={() => setShowScan(false)}
         onAddMeds={addMedsFromScan}
+      />
+      <SettingsModal
+        open={showSettings}
+        settings={settings}
+        onSave={updateSettings}
+        onClose={() => setShowSettings(false)}
       />
     </main>
   );

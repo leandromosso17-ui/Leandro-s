@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useStore, useTodaysDoses, doseKey, todayKey } from "@/lib/store";
+import { useStore, useTodaysDoses } from "@/lib/store";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ReminderOverlay from "@/components/ReminderOverlay";
-import { subscribeReminder, sendReminderSignal } from "@/lib/reminder";
+import { subscribeReminder } from "@/lib/reminder";
+import { runReminderNow } from "@/lib/notify";
 
 function timeLabel(t) {
   const [h] = t.split(":").map(Number);
@@ -22,7 +23,7 @@ function fmtTime(iso) {
 }
 
 export default function MassimoPage() {
-  const { ready, state, takeDose, undoDose, demoSpeed } = useStore();
+  const { ready, settings, takeDose, undoDose, demoSpeed } = useStore();
   const doses = useTodaysDoses();
   const [pendingConfirm, setPendingConfirm] = useState(null); // {medId, time, med}
   const [reminder, setReminder] = useState(null);
@@ -34,12 +35,6 @@ export default function MassimoPage() {
   const takenCount = doses.filter((d) => d.status === "taken").length;
   const total = doses.length;
   const pct = total ? Math.round((takenCount / total) * 100) : 0;
-
-  const isStillPending = (rem) => {
-    if (!rem?.medId || !rem?.time || !state) return false;
-    const key = doseKey(rem.medId, todayKey(), rem.time);
-    return state.doses[key]?.status !== "taken";
-  };
 
   const firstPending = useMemo(
     () => doses.find((d) => d.status !== "taken"),
@@ -173,18 +168,17 @@ export default function MassimoPage() {
         {firstPending && (
           <button
             onClick={() =>
-              sendReminderSignal({
-                medId: firstPending.med.id,
-                time: firstPending.time,
-                medName: firstPending.med.name,
-                dosage: firstPending.med.dosage,
-                patient: "Massimo",
+              runReminderNow({
+                settings: { ...settings, useTwilio: false }, // on-screen demo
+                dose: firstPending,
+                demoSpeed,
                 from: "Lorenzo",
+                patient: "Massimo",
               })
             }
             className="mt-8 w-full rounded-xl border border-dashed border-slate-300 py-3 text-sm text-slate-400"
           >
-            ▶︎ Demo: simulate reminder for {firstPending.med.name}
+            ▶︎ Demo: SMS now, call in a few seconds if not taken
           </button>
         )}
       </div>
@@ -199,12 +193,7 @@ export default function MassimoPage() {
         }}
       />
 
-      <ReminderOverlay
-        reminder={reminder}
-        demoSpeed={demoSpeed}
-        isStillPending={isStillPending}
-        onClose={() => setReminder(null)}
-      />
+      <ReminderOverlay reminder={reminder} onClose={() => setReminder(null)} />
     </main>
   );
 }
