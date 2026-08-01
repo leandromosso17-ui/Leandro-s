@@ -6,8 +6,9 @@ Built for adult children (like **Lorenzo**) who want to make sure their parent
 (like **Massimo**) takes the right medication at the right time — and never runs
 out of pills unexpectedly.
 
-> Hackathon MVP. Mobile-first. Two views. Real ElevenLabs voice for the
-> escalation call. SMS + telephony are simulated in-app for the demo.
+> Hackathon MVP. Mobile-first. Two views with a top-right switch between them.
+> Names are set on first run. Real Twilio SMS + calls (with a real ElevenLabs
+> voice) when configured, or a fully simulated mode that needs no accounts.
 
 ---
 
@@ -32,8 +33,10 @@ out of pills unexpectedly.
   Pick the photo **from your gallery / files**. (In this MVP the scan returns a
   pre-baked sample so the demo is reliable; the code is structured to drop in a
   real vision model.)
-- **Add manually** — full form to add a medication (dose, schedule, stock,
-  box size, icon, instructions).
+- **Add manually** — full form to add a medication: dose, times of day, and
+  frequency (**every day** or **specific weekdays**), stock, box size, icon and
+  instructions. Weekly meds only appear on their scheduled days and their
+  run-out date is calculated from the weekly rate.
 - **Live stock tracking** — every confirmed dose decrements inventory, and
   the run-out prediction updates automatically.
 
@@ -93,11 +96,25 @@ Everything works with **no keys** (simulate mode). Add keys to go live:
 > place calls from the **deployed** app (Vercel), or tunnel localhost with ngrok
 > and set `PUBLIC_BASE_URL`. SMS works from anywhere.
 
-## Deploy
+## Deploy to Vercel
 
-Deploys to **Vercel** as-is. Add the env vars above in project settings. The
-call audio URL is auto-detected from the request; set `PUBLIC_BASE_URL` only if
-needed.
+One-click (asks for the env vars during setup):
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/leandromosso17-ui/leandro-s/tree/claude/medication-tracker-hackathon-h0hhpw&env=ELEVENLABS_API_KEY,TWILIO_ACCOUNT_SID,TWILIO_AUTH_TOKEN,TWILIO_FROM_NUMBER)
+
+Or manually:
+1. Push this branch to GitHub (already done).
+2. On <https://vercel.com/new>, **Import** the repo → it auto-detects Next.js.
+3. Add the env vars from the table above (all optional — the app runs without
+   them in simulate mode).
+4. Deploy. The call audio URL is auto-detected; set `PUBLIC_BASE_URL` only if
+   Twilio can't reach `/api/twiml`.
+
+## First run
+
+On first open you'll set the **two names** (caregiver + parent) and optionally
+the parent's phone. Change them any time via the top-right switch → **⚙️
+Settings**, or the "Change names" link on the home screen.
 
 ## Demo script (2 minutes)
 

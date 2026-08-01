@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useStore, useTodaysDoses } from "@/lib/store";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ReminderOverlay from "@/components/ReminderOverlay";
+import RoleSwitch from "@/components/RoleSwitch";
 import { subscribeReminder } from "@/lib/reminder";
 import { runReminderNow } from "@/lib/notify";
 
@@ -46,6 +46,8 @@ export default function MassimoPage() {
   }
 
   const now = new Date();
+  const caregiver = settings.caregiverName || "Lorenzo";
+  const patient = settings.patientName || "Massimo";
   const greeting =
     now.getHours() < 12
       ? "Good morning"
@@ -56,10 +58,7 @@ export default function MassimoPage() {
   return (
     <main className="min-h-screen bg-slate-50 pb-28">
       <header className="bg-emerald-600 px-5 pb-6 pt-6 text-white">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="text-sm text-emerald-100">
-            ← Home
-          </Link>
+        <div className="flex items-center justify-between gap-2">
           <span className="text-sm text-emerald-100">
             {now.toLocaleDateString(undefined, {
               weekday: "long",
@@ -67,8 +66,13 @@ export default function MassimoPage() {
               day: "numeric",
             })}
           </span>
+          <RoleSwitch
+            current="massimo"
+            caregiverName={caregiver}
+            patientName={patient}
+          />
         </div>
-        <h1 className="mt-4 text-3xl font-extrabold">{greeting}, Massimo 👋</h1>
+        <h1 className="mt-4 text-3xl font-extrabold">{greeting}, {patient} 👋</h1>
         <p className="mt-1 text-emerald-100">Here are your pills for today.</p>
 
         <div className="mt-5 rounded-2xl bg-white/15 p-4">
@@ -159,7 +163,7 @@ export default function MassimoPage() {
           <div className="mt-6 animate-pop rounded-3xl bg-emerald-100 p-6 text-center">
             <div className="text-4xl">🎉</div>
             <p className="mt-2 text-lg font-bold text-emerald-800">
-              All done for today. Great job, Massimo!
+              All done for today. Great job, {patient}!
             </p>
           </div>
         )}
@@ -172,8 +176,8 @@ export default function MassimoPage() {
                 settings: { ...settings, useTwilio: false }, // on-screen demo
                 dose: firstPending,
                 demoSpeed,
-                from: "Lorenzo",
-                patient: "Massimo",
+                from: caregiver,
+                patient,
               })
             }
             className="mt-8 w-full rounded-xl border border-dashed border-slate-300 py-3 text-sm text-slate-400"

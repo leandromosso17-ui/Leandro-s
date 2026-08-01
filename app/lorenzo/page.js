@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
   useStore,
   useTodaysDoses,
@@ -9,11 +8,12 @@ import {
   runOutDate,
   buyByDate,
   formatDate,
-  pillsPerDay,
+  scheduleLabel,
 } from "@/lib/store";
 import AddMedModal from "@/components/AddMedModal";
 import ScanModal from "@/components/ScanModal";
 import SettingsModal from "@/components/SettingsModal";
+import RoleSwitch from "@/components/RoleSwitch";
 import { runReminderNow } from "@/lib/notify";
 import { useAutoReminders } from "@/lib/useAutoReminders";
 
@@ -63,44 +63,47 @@ export default function LorenzoPage() {
   }
 
   const lowStock = buyList.filter((b) => b.days <= 10);
+  const caregiver = settings.caregiverName || "Lorenzo";
+  const patient = settings.patientName || "Massimo";
 
   return (
     <main className="min-h-screen bg-slate-100 pb-16">
       <header className="bg-brand-700 px-5 pb-6 pt-6 text-white">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="text-sm text-brand-100">
-            ← Home
-          </Link>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowSettings(true)}
-              className="text-xs font-semibold text-white/90 underline"
-            >
-              ⚙️ Settings
-            </button>
-            <button
-              onClick={() => {
-                if (confirm("Reset demo data?")) resetDemo();
-              }}
-              className="text-xs text-brand-200 underline"
-            >
-              reset demo
-            </button>
-          </div>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={() => setShowSettings(true)}
+            className="text-xs font-semibold text-white/90 underline"
+          >
+            ⚙️ Settings
+          </button>
+          <RoleSwitch
+            current="lorenzo"
+            caregiverName={caregiver}
+            patientName={patient}
+          />
         </div>
         <div className="mt-3 flex items-center gap-2">
           <span className="text-2xl">🛡️</span>
           <h1 className="text-2xl font-extrabold">Caregiver dashboard</h1>
         </div>
         <p className="mt-1 text-brand-100">
-          Managing <b>Massimo's</b> medication · {state.meds.length} active meds
+          Managing <b>{patient}'s</b> medication · {state.meds.length} active meds
         </p>
         <p className="mt-1 text-xs text-brand-200">
           Reminders:{" "}
           {settings.useTwilio && settings.massimoPhone
             ? `📞 Twilio → ${settings.massimoPhone}`
-            : "🖥️ simulated on Massimo's screen"}
+            : `🖥️ simulated on ${patient}'s screen`}
           {settings.autoReminders ? " · auto ON" : ""}
+          {" · "}
+          <button
+            onClick={() => {
+              if (confirm("Reset demo data?")) resetDemo();
+            }}
+            className="underline"
+          >
+            reset demo
+          </button>
         </p>
 
         <div className="mt-5 flex gap-3">
@@ -131,7 +134,7 @@ export default function LorenzoPage() {
 
           {pendingDoses.length === 0 ? (
             <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
-              ✓ Massimo has taken everything scheduled so far.
+              ✓ {patient} has taken everything scheduled so far.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
@@ -155,20 +158,20 @@ export default function LorenzoPage() {
                         settings,
                         dose: d,
                         demoSpeed,
-                        from: "Lorenzo",
-                        patient: "Massimo",
+                        from: caregiver,
+                        patient,
                         onStage: (stage, r) => {
                           if (stage === "call" && r?.real && !r.ok) {
                             flash(`Call failed: ${r.data?.detail || r.data?.error || "check Twilio"}`);
                           } else if (stage === "call") {
-                            flash(`📞 Calling Massimo about ${d.med.name}`);
+                            flash(`📞 Calling ${patient} about ${d.med.name}`);
                           }
                         },
                       });
                       flash(
                         settings.useTwilio && settings.massimoPhone
-                          ? `SMS sent to Massimo for ${d.med.name}`
-                          : `Reminder shown on Massimo's screen for ${d.med.name}`
+                          ? `SMS sent to ${patient} for ${d.med.name}`
+                          : `Reminder shown on ${patient}'s screen for ${d.med.name}`
                       );
                     }}
                     className="rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"
@@ -248,8 +251,7 @@ export default function LorenzoPage() {
                         {med.name} {med.dosage}
                       </div>
                       <div className="text-xs text-slate-500">
-                        {med.purpose} · {med.pillsPerDose}/dose ·{" "}
-                        {med.schedule.join(", ")} · {pillsPerDay(med)}/day
+                        {med.purpose} · {med.pillsPerDose}/dose · {scheduleLabel(med)}
                       </div>
                     </div>
                     <button

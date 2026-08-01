@@ -1,11 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { EVERY_DAY } from "@/lib/store";
 
 const TIME_OPTIONS = [
   { label: "Morning", time: "08:00" },
   { label: "Afternoon", time: "13:00" },
   { label: "Evening", time: "20:00" },
+];
+
+const WEEKDAYS = [
+  { label: "M", d: 1 },
+  { label: "T", d: 2 },
+  { label: "W", d: 3 },
+  { label: "T", d: 4 },
+  { label: "F", d: 5 },
+  { label: "S", d: 6 },
+  { label: "S", d: 0 },
 ];
 
 const EMOJI_OPTIONS = ["💊", "🔴", "🔵", "🟡", "🟢", "🟣", "🟠", "⚪", "💉"];
@@ -17,6 +28,8 @@ export default function AddMedModal({ open, onClose, onAdd }) {
     purpose: "",
     pillsPerDose: 1,
     times: ["08:00"],
+    freq: "daily", // "daily" | "weekly"
+    days: [1], // used when freq === "weekly"
     inventory: 30,
     pillsPerBox: 30,
     emoji: "💊",
@@ -35,9 +48,19 @@ export default function AddMedModal({ open, onClose, onAdd }) {
     });
   };
 
+  const toggleDay = (d) => {
+    setForm((f) => {
+      const has = f.days.includes(d);
+      const days = has ? f.days.filter((x) => x !== d) : [...f.days, d];
+      return { ...f, days: days.sort() };
+    });
+  };
+
   const submit = (e) => {
     e.preventDefault();
     if (!form.name.trim() || form.times.length === 0) return;
+    const days = form.freq === "weekly" ? form.days : EVERY_DAY;
+    if (days.length === 0) return; // weekly needs at least one day
     onAdd({
       name: form.name.trim(),
       dosage: form.dosage.trim(),
@@ -45,6 +68,7 @@ export default function AddMedModal({ open, onClose, onAdd }) {
       form: "tablet",
       pillsPerDose: Number(form.pillsPerDose) || 1,
       schedule: form.times,
+      days,
       inventory: Number(form.inventory) || 0,
       pillsPerBox: Number(form.pillsPerBox) || 0,
       emoji: form.emoji,
@@ -57,6 +81,8 @@ export default function AddMedModal({ open, onClose, onAdd }) {
       purpose: "",
       pillsPerDose: 1,
       times: ["08:00"],
+      freq: "daily",
+      days: [1],
       inventory: 30,
       pillsPerBox: 30,
       emoji: "💊",
@@ -132,6 +158,62 @@ export default function AddMedModal({ open, onClose, onAdd }) {
               );
             })}
           </div>
+        </div>
+
+        <div className="mt-4">
+          <div className="text-sm font-medium text-slate-600">How often</div>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => set("freq", "daily")}
+              className={`flex-1 rounded-xl border px-2 py-2 text-sm font-semibold transition ${
+                form.freq === "daily"
+                  ? "border-brand-500 bg-brand-50 text-brand-700"
+                  : "border-slate-200 bg-white text-slate-500"
+              }`}
+            >
+              Every day
+            </button>
+            <button
+              type="button"
+              onClick={() => set("freq", "weekly")}
+              className={`flex-1 rounded-xl border px-2 py-2 text-sm font-semibold transition ${
+                form.freq === "weekly"
+                  ? "border-brand-500 bg-brand-50 text-brand-700"
+                  : "border-slate-200 bg-white text-slate-500"
+              }`}
+            >
+              Specific days
+            </button>
+          </div>
+
+          {form.freq === "weekly" && (
+            <div className="mt-2 flex gap-1.5">
+              {WEEKDAYS.map((w) => {
+                const active = form.days.includes(w.d);
+                return (
+                  <button
+                    type="button"
+                    key={w.d}
+                    onClick={() => toggleDay(w.d)}
+                    className={`h-9 flex-1 rounded-lg border text-sm font-semibold transition ${
+                      active
+                        ? "border-brand-500 bg-brand-500 text-white"
+                        : "border-slate-200 bg-white text-slate-500"
+                    }`}
+                    aria-label={`weekday ${w.d}`}
+                  >
+                    {w.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <p className="mt-1 text-xs text-slate-400">
+            {form.freq === "weekly"
+              ? "Taken on the selected weekdays, at the times above."
+              : "Taken every day, at the times above."}
+          </p>
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-3">

@@ -61,8 +61,29 @@ export default function SettingsModal({ open, settings, onSave, onClose }) {
           </button>
         </div>
 
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <label className="text-sm font-medium text-slate-600">
+            Caregiver's name
+            <input
+              className={field}
+              value={form.caregiverName || ""}
+              onChange={(e) => set("caregiverName", e.target.value)}
+              placeholder="Lorenzo"
+            />
+          </label>
+          <label className="text-sm font-medium text-slate-600">
+            Parent's name
+            <input
+              className={field}
+              value={form.patientName || ""}
+              onChange={(e) => set("patientName", e.target.value)}
+              placeholder="Massimo"
+            />
+          </label>
+        </div>
+
         <label className="mt-4 block text-sm font-medium text-slate-600">
-          Massimo's phone (E.164)
+          {form.patientName || "Massimo"}'s phone (E.164)
           <input
             className={field}
             value={form.massimoPhone}
