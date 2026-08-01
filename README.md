@@ -1,137 +1,168 @@
-# 🛡️ MedGuard
+# Medimo
 
-**Medication tracker for families managing an aging parent's meds.**
+Medimo helps an adult child remotely manage an elderly parent's medications.
 
-Built for adult children (like **Lorenzo**) who want to make sure their parent
-(like **Massimo**) takes the right medication at the right time — and never runs
-out of pills unexpectedly.
+In this demo, **Lorenzo** is the caregiver son and **Massimo** is his father. Lorenzo sets up the
+medicines, watches whether doses were taken, tracks stock and refills, and gets alerted when a dose
+is late. Massimo gets an extremely simple screen that shows only what he has to take right now.
 
-> Hackathon MVP. Mobile-first. Two views with a top-right switch between them.
-> Names are set on first run. Real Twilio SMS + calls (with a real ElevenLabs
-> voice) when configured, or a fully simulated mode that needs no accounts.
+Built with Expo (React Native), Expo Router, HeroUI Native, Uniwind and Zustand.
 
----
+## Two experiences, one app
 
-## What it does
+| Role                | Entry point       | What it shows                                                                                                                  |
+| ------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Lorenzo (caregiver) | `app/(caregiver)` | Overview card, today's dose timeline, alerts and escalation, inventory and refill risk, adherence charts, care calendar, notes |
+| Massimo (senior)    | `app/(senior)`    | One current medicine, one big **Taken** button, next medicine, a light today summary, and help                                 |
 
-### 👴 Massimo — the patient view (`/massimo`)
-- A big, friendly list of **today's pills**, grouped by time of day.
-- One large **"I took it"** button per dose.
-- A **double-check dialog** so an accidental tap never marks a dose as taken.
-- Each taken dose is stamped with the **exact time** it was confirmed.
-- A celebratory "all done" state when the day is complete.
+The role switcher lives on the welcome screen (`app/index.tsx`) and can be reopened at any time from
+either experience, so both sides can be demoed in seconds.
 
-### 🧑‍💻 Lorenzo — the caregiver dashboard (`/lorenzo`)
-- **Today's adherence** — see what Massimo has and hasn't taken, and tap
-  **Remind** to push a reminder to his phone.
-- **Refill calendar** — every medication sorted by how many days of supply
-  remain, with a **"runs out" date** and a **"buy by" date** (a few days of
-  buffer) so Lorenzo can get a new prescription to the doctor and restock in
-  time.
-- **Scan prescription** 📷 — snap a photo of a prescription and the meds,
-  doses, schedule and pill counts are added to the dashboard automatically.
-  Pick the photo **from your gallery / files**. (In this MVP the scan returns a
-  pre-baked sample so the demo is reliable; the code is structured to drop in a
-  real vision model.)
-- **Add manually** — full form to add a medication: dose, times of day, and
-  frequency (**every day** or **specific weekdays**), stock, box size, icon and
-  instructions. Weekly meds only appear on their scheduled days and their
-  run-out date is calculated from the weekly rate.
-- **Live stock tracking** — every confirmed dose decrements inventory, and
-  the run-out prediction updates automatically.
+## Product flows included
 
-### 📞 The reminder escalation
-For a dose scheduled at **12:00**:
-1. **SMS at 11:45** (−15 min) — *"Ciao Massimo, don't forget to take XYZ. Have a
-   great day."*
-2. **Phone call at 12:05** (+5 min) — only if the dose still isn't marked taken.
-   The call is voiced by a **real ElevenLabs voice** (Twilio dials, ElevenLabs
-   speaks). Both offsets are configurable in **⚙️ Settings**.
+- Manual medicine setup (`app/medicine/add.tsx`) with an automatic schedule
+- Simulated prescription scan: capture → processing stages → structured review → confirmation
+  (`app/scan/index.tsx`, `app/scan/review.tsx`)
+- Dose states: `upcoming`, `due`, `late`, `taken`, `missed`, `skipped`
+- Double confirmation before a dose is finalised, with the exact timestamp and an easy undo
+  (`app/confirm/[doseId].tsx`)
+- Reminder ladder: phone reminder → SMS after 10 minutes → voice call 30 minutes later
+  (`app/escalation/[doseId].tsx`)
+- Inventory with remaining units, predicted runout date and refill risk (`app/inventory.tsx`)
+- Care calendar for refills, pharmacy pickups, appointments and prescription renewals
+- Notes and symptoms log
 
-**Two modes**, toggled in Settings:
-- **Simulate** (default) — the SMS + call appear on Massimo's screen. No
-  accounts needed, perfect for offline demos. Open Lorenzo and Massimo in two
-  tabs/devices and the reminder jumps from one to the other.
-- **Twilio** — real SMS and a real phone call to Massimo's number.
+## Project structure
 
-**Automatic reminders** (Settings toggle) fire at the real clock times while
-Lorenzo's dashboard stays open. For a quick stage demo, the **Remind** button
-and Massimo's demo button run the whole chain immediately (call in ~8s).
+```
+app/
+  index.tsx                 welcome + role switch
+  (caregiver)/              Lorenzo tabs: today, medicines, alerts, care plan, notes
+  (senior)/                 Massimo tabs: today, medicines, help
+  medicine/                 add + detail
+  scan/                     mocked OCR flow
+  confirm/[doseId].tsx      double confirmation (both roles)
+  escalation/[doseId].tsx   reminder ladder
+  inventory.tsx             stock + refills
+  notes/new.tsx, tasks/new.tsx
+components/                 shared UI (pill graphics, status pills, charts, cards)
+  caregiver/                caregiver-only building blocks
+  senior/                   senior-only building blocks
+hooks/                      useNow (live dose statuses), useFlash (confirmations)
+lib/
+  types.ts                  domain model
+  schedule.ts               schedule engine: statuses, adherence, inventory projection
+  seed.ts                   seeded demo story (6 medicines, 30 days of history)
+  store.ts                  Zustand store and all actions
+  theme.ts                  palette as hex for native props
+  services/
+    bilt.ts                 Postgres/Supabase client (lazy, typed)
+    db/                     schema types, row <-> app mappers, product queries
+    sms.ts, voice.ts, ocr.ts, reminders.ts, backend.ts
+global.css                  theme tokens for HeroUI Native + Uniwind
+```
 
----
+## Backend data model (Postgres / Supabase)
 
-## Tech
+The hosted schema is normalised around the real product logic. Definitions are separate from
+prescriptions, recurrence rules are separate from concrete dose instances, and dose instances are
+separate from the confirmation history.
 
-- **Next.js 14** (App Router) + **Tailwind CSS**, mobile-first.
-- Client-side state persisted to **localStorage** (no database to set up).
-- **One API route** (`/api/voice`) calls **ElevenLabs** text-to-speech for the
-  call. If no API key is set it gracefully falls back to the browser's built-in
-  voice, so the demo never breaks.
+| Group          | Tables                                                                      |
+| -------------- | --------------------------------------------------------------------------- |
+| Identity       | `profiles` (role `caregiver` \| `recipient`), `caregiver_relationships`      |
+| Medication     | `medications` (catalog) → `patient_medications` (what Massimo takes)         |
+| Scheduling     | `dose_schedules` (rules) → `scheduled_doses` (instances)                     |
+| Truth          | `dose_logs` (append-only: who confirmed, exact `confirmed_at`, method)       |
+| Reminders      | `reminder_events` (push → SMS → voice call, delivery status, provider id)    |
+| Stock          | `medication_inventory` (snapshot) + `inventory_transactions` (ledger)        |
+| Care plan      | `appointments`, `care_tasks`                                                |
+| Care log       | `notes`, `care_alerts`                                                      |
+| Scan onboarding| `documents` (private storage) → `ocr_extractions` (structured, reviewable)   |
+| Traceability   | `audit_logs` (append-only)                                                  |
 
-## Run it
+Relationships: a caregiver can be linked to many recipients and a recipient to many caregivers; a
+recipient has many prescriptions; a prescription has many schedule rules; a rule generates many dose
+instances; a dose instance has many reminder events and many log entries.
+
+**Views** `v_dose_timeline` (dose + medicine + live status), `v_inventory_status` (days left,
+projected runout, refill risk), `v_adherence_daily`, `v_care_agenda`, `v_medication_daily_usage`.
+
+**Functions** `confirm_dose` (writes the timestamp, the log row, the stock movement and resolves
+reminders in one call), `undo_dose_confirmation`, `snooze_dose`, `generate_scheduled_doses`
+(expands rules into instances, idempotent), `adherence_stats`, `misses_by_day_part`,
+`refresh_runout_projection`, `derive_dose_status`, `ensure_profile`, `claim_demo_profile`.
+
+**Row Level Security** is on for every table. Policies call `SECURITY DEFINER` helpers
+(`is_profile_owner`, `is_linked_caregiver`, `can_view_recipient`, `can_edit_recipient`,
+`can_view_documents_of`, …) so a recipient only reaches their own data, a caregiver only reaches
+linked recipients, editing medications / schedules / notes / tasks requires a link with `can_edit`,
+`dose_logs`, `inventory_transactions` and `audit_logs` have no update or delete policy, and
+prescription files live in the private `medimo-documents` bucket under
+`<recipient_profile_id>/<file>`.
+
+**Indexes** cover the dashboard paths: `recipient_profile_id`, `scheduled_for`,
+`scheduled_local_date`, dose `status` (partial index on open doses), `due_at` for tasks, runout dates,
+relationship keys and unresolved reminders.
+
+Timestamps: every table carries `created_at`; mutable tables also carry `updated_at`, maintained by
+`moddatetime` triggers.
+
+## Data access layer
+
+`lib/services/db` is the only place that talks to the database:
+
+| File         | Responsibility                                                                        |
+| ------------ | ------------------------------------------------------------------------------------- |
+| `schema.ts`  | Enums, row types and the `MedimoDatabase` type passed to the client                    |
+| `mappers.ts` | Row ↔ app type translation (`lib/types.ts`), including insert payload builders         |
+| `queries.ts` | Product-shaped calls: today's timeline, current/next dose, `confirmDose`, adherence, inventory, agenda, notes, scan upload, refills, audit |
+
+`lib/services/backend.ts` keeps the `MedimoBackend` gateway: `createLocalBackend` (seeded demo,
+current default) and `createBiltBackend` (hosted Postgres, including realtime on `scheduled_doses`).
+`selectBackend` returns the hosted one once a signed-in profile and a linked recipient are known.
+
+The demo still runs on the seeded Zustand store, so the app works with or without a session. To go
+live: sign in, call `ensureProfile` (or `claimDemoProfile` for the seeded Lorenzo / Massimo rows),
+then feed the resulting profile ids into `selectBackend`.
+
+## Integration boundaries
+
+Everything external is behind a small interface with a mock implementation, so production wiring is a
+swap rather than a rewrite:
+
+| Concern                  | File                        | Production swap                                                                                |
+| ------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------- |
+| SMS reminders            | `lib/services/sms.ts`       | Set `EXPO_PUBLIC_SMS_ENDPOINT` to a backend route that calls Twilio / Vonage                   |
+| Outbound voice calls     | `lib/services/voice.ts`     | Set `EXPO_PUBLIC_VOICE_ENDPOINT` and `EXPO_PUBLIC_ELEVENLABS_AGENT_ID` for an ElevenLabs agent |
+| Prescription OCR         | `lib/services/ocr.ts`       | Set `EXPO_PUBLIC_OCR_ENDPOINT` for Document AI / Textract / a vision model                     |
+| Database, auth, realtime | `lib/services/backend.ts` + `lib/services/db` | Live Postgres schema; `createBiltBackend` implements `MedimoBackend`         |
+| Device reminders         | `lib/services/reminders.ts` | `expo-notifications` triggers, bundled sound, haptics, spoken reminder                         |
+
+Provider credentials belong on the server: the app calls your backend, the backend calls the provider.
+
+## Demo data
+
+`lib/seed.ts` seeds six medicines with different rhythms (morning, after lunch, evening, twice
+daily, one nearly out of stock, one with a recent missed-dose alert), 30 days of adherence history,
+an upcoming cardiology appointment, a pharmacy pickup, a prescription renewal and a few care notes.
+Some of today's doses are re-timed relative to the current clock so the demo always has a dose that
+is due now, one that is late and already escalated, and one still ahead.
+
+Use **Reset demo data** on the welcome screen to start over.
+
+The same story is seeded in the hosted database: Lorenzo and Massimo profiles with their
+son → father relationship, six prescriptions with schedules and stock, 30 days of dose instances with
+confirmation logs and the reminder ladder, open alerts, a cardiology appointment, a blood test,
+refill / renewal tasks, care notes and one scanned prescription with its OCR extraction.
+
+## Running it
 
 ```bash
 npm install
-cp .env.example .env.local   # add keys (all optional — see below)
-npm run dev
+npx expo start
 ```
 
-Open <http://localhost:3000> and pick **Lorenzo** or **Massimo**.
-
-Everything works with **no keys** (simulate mode). Add keys to go live:
-
-| To enable | Set |
-|---|---|
-| Real ElevenLabs call voice | `ELEVENLABS_API_KEY` (+ optional `ELEVENLABS_VOICE_ID`) |
-| Real SMS + phone calls | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` |
-
-### Twilio (free trial works)
-1. Sign up at <https://www.twilio.com/try-twilio> — free credit + a phone number.
-2. **Verify Massimo's number** (trial can only text/call verified numbers).
-3. Put the Account SID, Auth Token and Twilio number in your env.
-4. In the app: **⚙️ Settings** → enter Massimo's phone, tick **Use Twilio**,
-   and hit **Send test SMS** / **Test call**.
-
-> The **call** needs a public URL for Twilio to fetch the ElevenLabs audio, so
-> place calls from the **deployed** app (Vercel), or tunnel localhost with ngrok
-> and set `PUBLIC_BASE_URL`. SMS works from anywhere.
-
-## Deploy to Vercel
-
-Use the **Import** flow (not "Clone Template" — this repo is private, and the
-clone flow tries to create a new repo and stalls):
-
-1. Go to <https://vercel.com/new> and select your Vercel team in the top-left.
-2. Under **Import Git Repository**, find **`leandromosso17-ui/Leandro-s`** and
-   click **Import**. (If it's not listed, use the account dropdown / "Adjust
-   GitHub App Permissions" and grant access to that GitHub account.)
-3. It auto-detects **Next.js** — leave the build settings default.
-4. Expand **Environment Variables** and add the ones from the table above (all
-   optional — the app runs without them in simulate mode). Then **Deploy**.
-
-The call audio URL is auto-detected; set `PUBLIC_BASE_URL` only if Twilio can't
-reach `/api/twiml`.
-
-## First run
-
-On first open you'll set the **two names** (caregiver + parent) and optionally
-the parent's phone. Change them any time via the top-right switch → **⚙️
-Settings**, or the "Change names" link on the home screen.
-
-## Demo script (2 minutes)
-
-1. **Lorenzo** taps *Scan prescription* → meds populate with counts + schedule.
-2. Switch to **Massimo** → giant buttons; he taps *I took it* and confirms.
-3. Back on **Lorenzo** → adherence updates, stock ticks down, refill calendar
-   shows *"buy Aspirin by …"*.
-4. Lorenzo taps **Remind** on a pending pill → Massimo's phone shows the SMS,
-   then (seconds later) "rings" and an **ElevenLabs voice** reminds him.
-
----
-
-## Roadmap (post-hackathon)
-
-- Real SMS + outbound calls via **Twilio** (Twilio dials, ElevenLabs voices).
-- Real prescription OCR with a vision model.
-- Shared cloud state (Supabase) for true multi-device sync.
-- Scheduled reminder engine (cron) instead of demo timers.
+Design language: deep Incremental Blue `#113253` and Indigo Cloth `#214D72` for structure, Cadet Grey
+`#93A3AE` for support surfaces, 24 Karat `#DFC684` and Golden Mean `#C59E3A` for gentle warnings —
+warm, calm and deliberately not clinical.

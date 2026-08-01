@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import 'tailwindcss';
+@import 'uniwind';
+
+@import 'heroui-native/styles';
+
+/*
+ * Medimo theme
+ *
+ * Palette (hex -> oklch):
+ *   Incremental Blue  #113253  primary
+ *   Indigo Cloth      #214D72  secondary
+ *   Cadet Grey        #93A3AE  neutral support
+ *   24 Karat          #DFC684  soft premium accent
+ *   Golden Mean       #C59E3A  attention / refill warning
+ *
+ * Semantic HeroUI tokens are overridden inside Uniwind theme variants so both
+ * web and native (Expo Go) resolve the same brand colors.
+ */
+
+@layer theme {
+  :root {
+    @variant light {
+      --background: oklch(0.972 0.008 85);
+      --foreground: oklch(0.312 0.071 251);
+
+      --surface: oklch(1 0 0);
+      --surface-foreground: oklch(0.312 0.071 251);
+      --surface-secondary: oklch(0.986 0.006 85);
+      --surface-tertiary: oklch(0.962 0.012 85);
+      --surface-tertiary-foreground: oklch(0.312 0.071 251);
+
+      --overlay: oklch(0.995 0.004 85);
+      --overlay-foreground: oklch(0.312 0.071 251);
+      --backdrop: oklch(0.312 0.071 251 / 32%);
+
+      --muted: oklch(0.6 0.028 245);
+
+      --default: oklch(0.951 0.009 240);
+      --default-foreground: oklch(0.408 0.079 247);
+
+      --accent: oklch(0.312 0.071 251);
+      --accent-foreground: oklch(0.99 0.004 85);
+
+      --field-background: oklch(1 0 0);
+      --field-foreground: oklch(0.312 0.071 251);
+      --field-placeholder: oklch(0.66 0.024 240);
+      --field-border: oklch(0.906 0.014 240);
+
+      --success: oklch(0.605 0.088 163);
+      --success-foreground: oklch(0.99 0.004 85);
+      --warning: oklch(0.717 0.124 87);
+      --warning-foreground: oklch(0.28 0.045 90);
+      --danger: oklch(0.56 0.125 32);
+      --danger-foreground: oklch(0.99 0.004 85);
+
+      --segment: oklch(1 0 0);
+      --segment-foreground: oklch(0.312 0.071 251);
+
+      --border: oklch(0.912 0.012 240);
+      --separator: oklch(0.928 0.01 240);
+      --focus: var(--accent);
+      --link: oklch(0.408 0.079 247);
+
+      --surface-shadow:
+        0 2px 6px 0 rgba(17, 50, 83, 0.05), 0 1px 2px 0 rgba(17, 50, 83, 0.05),
+        0 0 1px 0 rgba(17, 50, 83, 0.06);
+      --overlay-shadow: 0 2px 10px 0 rgba(17, 50, 83, 0.04), 0 14px 28px 0 rgba(17, 50, 83, 0.07);
+      --field-shadow: 0 1px 2px 0 rgba(17, 50, 83, 0.04), 0 0 1px 0 rgba(17, 50, 83, 0.06);
+    }
+
+    @variant dark {
+      --background: oklch(0.972 0.008 85);
+      --foreground: oklch(0.312 0.071 251);
+
+      --surface: oklch(1 0 0);
+      --surface-foreground: oklch(0.312 0.071 251);
+      --surface-secondary: oklch(0.986 0.006 85);
+      --surface-tertiary: oklch(0.962 0.012 85);
+      --surface-tertiary-foreground: oklch(0.312 0.071 251);
+
+      --overlay: oklch(0.995 0.004 85);
+      --overlay-foreground: oklch(0.312 0.071 251);
+      --backdrop: oklch(0.312 0.071 251 / 32%);
+
+      --muted: oklch(0.6 0.028 245);
+
+      --default: oklch(0.951 0.009 240);
+      --default-foreground: oklch(0.408 0.079 247);
+
+      --accent: oklch(0.312 0.071 251);
+      --accent-foreground: oklch(0.99 0.004 85);
+
+      --field-background: oklch(1 0 0);
+      --field-foreground: oklch(0.312 0.071 251);
+      --field-placeholder: oklch(0.66 0.024 240);
+      --field-border: oklch(0.906 0.014 240);
+
+      --success: oklch(0.605 0.088 163);
+      --success-foreground: oklch(0.99 0.004 85);
+      --warning: oklch(0.717 0.124 87);
+      --warning-foreground: oklch(0.28 0.045 90);
+      --danger: oklch(0.56 0.125 32);
+      --danger-foreground: oklch(0.99 0.004 85);
+
+      --segment: oklch(1 0 0);
+      --segment-foreground: oklch(0.312 0.071 251);
+
+      --border: oklch(0.912 0.012 240);
+      --separator: oklch(0.928 0.01 240);
+      --focus: var(--accent);
+      --link: oklch(0.408 0.079 247);
+    }
+  }
+}
+
+/* Brand utilities: bg-*, text-*, border-* for the Medimo palette. */
+@theme {
+  --color-ink: oklch(0.312 0.071 251);
+  --color-ink-soft: oklch(0.408 0.079 247);
+  --color-ink-tint: oklch(0.93 0.02 245);
+  --color-cadet: oklch(0.707 0.024 238);
+  --color-cadet-soft: oklch(0.955 0.008 240);
+  --color-gold: oklch(0.717 0.124 87);
+  --color-gold-soft: oklch(0.833 0.089 89);
+  --color-gold-tint: oklch(0.965 0.028 88);
+  --color-cream: oklch(0.972 0.008 85);
+  --color-sage: oklch(0.605 0.088 163);
+  --color-sage-tint: oklch(0.955 0.028 163);
+  --color-sage-deep: oklch(0.44 0.078 163);
+  --color-clay: oklch(0.56 0.125 32);
+  --color-clay-tint: oklch(0.955 0.024 32);
+  --color-clay-deep: oklch(0.42 0.11 32);
+  --color-gold-deep: oklch(0.46 0.092 87);
+}
+
+@source './node_modules/heroui-native/lib';
