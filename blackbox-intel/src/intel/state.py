@@ -48,6 +48,13 @@ class State:
         d["summary"] = json.loads(d.pop("summary_json"))
         return d
 
+    def recent_episodes(self, n: int = 10) -> list[dict]:
+        """Ultime n puntate sintetizzate, dalla più vecchia alla più recente."""
+        rows = self.db.execute(
+            "select title, published, slot, summary_json from episodes where summary_json is not null "
+            "order by published desc limit ?", (n,)).fetchall()
+        return [{**dict(r), "summary": json.loads(r["summary_json"])} for r in reversed(rows)]
+
     def save_episode(self, guid, title, published, slot, source, summary, tokens_in, tokens_out):
         self.db.execute(
             "insert or replace into episodes values (?,?,?,?,?,?,?,?,datetime('now'))",

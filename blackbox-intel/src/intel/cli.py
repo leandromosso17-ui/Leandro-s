@@ -38,7 +38,7 @@ def process_episode(cfg, state, ep) -> dict:
     tr, method, tried = get_transcript(cfg, ep)
     out = {"title": ep.title, "slot": ep.slot, "published": ep.published, "link": ep.link,
            "method": method, "tried": tried, "transcript_status": tr["status"],
-           "transcript_url": tr["source_url"]}
+           "transcript_url": tr["source_url"], "names": {p.ticker: p.nome for p in cfg.positions}}
     if tr["status"] != "ok":
         if cached:  # trascrizione non più scaricabile ma sintesi già in cache
             out["summary"] = {**cached["summary"], "_cached": True, "_tokens_in": 0, "_tokens_out": 0}
@@ -69,16 +69,35 @@ def render_episode_md(r: dict) -> str:
         L += ["", f"**Tesi centrale:** {s['tesi_centrale']}"]
     if s.get("sintesi"):
         L += ["", "**Sintesi**"] + [f"- {x}" for x in s["sintesi"]]
-    if s.get("segnali"):
-        L += ["", "**Segnali di mercato**", "", "| Min | Citazione | Asset/tema | Tipo |", "|---|---|---|---|"]
-        for g in s["segnali"]:
-            L.append(f"| {g.get('timestamp', '')} | «{g.get('citazione', '')}» | {g.get('asset_o_tema', '')} | {g.get('tipo', '')} |")
-    if r.get("links"):
-        L += ["", "**Collegamenti ai tuoi titoli**"]
-        for k in r["links"]:
-            L.append(f"- **{k['ticker']}** — {k['tipo']} ({k['dettaglio']}) a {', '.join(k['timestamp'])}")
-    elif r["transcript_status"] == "ok":
-        L += ["", "Nessun titolo del CSV citato né toccato dai temi configurati."]
+    names = r.get("names", {})
+    assets = [a for a in s.get("tuoi_asset") or [] if a.get("concetti")]
+    if assets:
+        L += ["", "**🎯 I tuoi asset**"]
+        for a in assets:
+            t = a.get("ticker", "")
+            ts = ", ".join(a.get("timestamp") or [])
+            L += ["", f"**{names.get(t, t)} ({t})**" + (f" · {ts}" if ts else "")]
+            L += [f"- {c}" for c in a.get("concetti") or []]
+    elif s.get("_v"):
+        L += ["", "**🎯 I tuoi asset:** non se ne parla in questa puntata."]
+    if s.get("opportunita"):
+        L += ["", "**💡 Opportunità / keep an eye on**"]
+        for o in s["opportunita"]:
+            ts = f" ({o['timestamp']})" if o.get("timestamp") else ""
+            L.append(f"- **{o.get('idea', '')}**{ts}: {o.get('cosa_dicono', '')}")
+    b = s.get("bolla_ai") or {}
+    if b:
+        L += ["", f"**🫧 Bolla AI — allarme degli ospiti: {b.get('livello_allarme', '?')}**"]
+        if b.get("come_la_descrivono"):
+            L.append(b["come_la_descrivono"])
+        for label, key in (("Segnali di scoppio", "segnali_di_scoppio"), ("Segnali di tenuta", "segnali_di_tenuta")):
+            if b.get(key):
+                L += ["", f"_{label}_"] + [f"- ({x.get('timestamp', '')}) {x.get('concetto', '')}" for x in b[key]]
+    # controllo incrociato senza token: nomi trovati nel testo dal Python
+    direct = [k for k in r.get("links") or [] if k["tipo"] == "citato direttamente"]
+    if direct:
+        L += ["", "_Citati per nome nella trascrizione: " + "; ".join(
+            f"{names.get(k['ticker'], k['ticker'])} a {', '.join(k['timestamp'])}" for k in direct) + "_"]
     if s.get("non_chiaro"):
         L += ["", "**Non chiaro / limiti:** " + "; ".join(s["non_chiaro"])]
     if s:
@@ -86,6 +105,18 @@ def render_episode_md(r: dict) -> str:
         L.append("_Token: da cache, 0_" if s.get("_cached")
                  else f"_Token: {s.get('_tokens_in', 0):,} in / {s.get('_tokens_out', 0):,} out_")
     return "\n".join(L)
+
+
+def render_bubble_trend(state, n: int = 10) -> str:
+    """Andamento dell'allarme bolla AI nelle ultime puntate in cache (zero token)."""
+    eps = [e for e in state.recent_episodes(n) if (e["summary"].get("bolla_ai") or {}).get("livello_allarme")]
+    if not eps:
+        return ""
+    cells = [f"{datetime.fromisoformat(e['published']):%d/%m} {'sera' if e['slot'] == 'sera' else 'matt.'}: "
+             f"**{e['summary']['bolla_ai']['livello_allarme']}**" for e in eps]
+    return ("### 🫧 Termometro bolla AI\n"
+            "_Quanto si dicono preoccupati gli ospiti, puntata per puntata (non è un consiglio operativo)._\n\n"
+            + " → ".join(cells))
 
 
 def cmd_podcast(cfg, state, args):
@@ -102,6 +133,9 @@ def cmd_podcast(cfg, state, args):
     for ep in res["data"][:args.last]:
         print(f"… {ep.title}", flush=True)
         parts += [render_episode_md(process_episode(cfg, state, ep)), ""]
+    trend = render_bubble_trend(state)
+    if trend:
+        parts[2:2] = [trend, ""]
     tot = llm.weekly_totals(cfg.logs_dir / "tokens.csv")
     parts.append(f"_Token ultimi 7 giorni: {tot['calls']} chiamate, {tot['tokens_in']:,} in, "
                  f"{tot['tokens_out']:,} out (equivalente API ${tot['cost_usd_equiv']:.3f})_")
@@ -156,6 +190,8 @@ def cmd_run(cfg, state, args):
         ep = _wait_for_episode(cfg, state, args.slot, tz)
         if ep:
             md = render_episode_md(process_episode(cfg, state, ep))
+            trend = render_bubble_trend(state)
+            md = f"{trend}\n\n{md}" if trend else md
         else:
             md = f"### Puntata {args.slot}: non ancora disponibile dopo {cfg.section('podcast').get('max_wait_minutes', 120)} minuti di attesa."
         # Moduli 2-7, Notion e HTML: in arrivo, un modulo alla volta.
