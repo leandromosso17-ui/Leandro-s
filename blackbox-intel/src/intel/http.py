@@ -16,7 +16,15 @@ def get(url: str, *, params=None, headers=None, timeout=20, retries=3, min_inter
     for attempt in range(retries + 1):
         if min_interval:
             time.sleep(min_interval)
-        r = requests.get(url, params=params, headers=h, timeout=timeout)
+        try:
+            r = requests.get(url, params=params, headers=h, timeout=timeout)
+        except (requests.ConnectionError, requests.Timeout):
+            # DNS/hotspot instabili: riprova prima di dichiarare morta la fonte.
+            if attempt >= retries:
+                raise
+            time.sleep(delay)
+            delay *= 2
+            continue
         if r.status_code in (429, 500, 502, 503, 504) and attempt < retries:
             retry_after = r.headers.get("Retry-After", "")
             time.sleep(float(retry_after) if retry_after.isdigit() else delay)

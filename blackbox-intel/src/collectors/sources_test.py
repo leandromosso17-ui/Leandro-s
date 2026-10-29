@@ -14,7 +14,7 @@ XOOMAR = "https://xoomar.com/api/markets"
 
 
 def _get(url, **kw):
-    r = http.get(url, retries=1, **kw)
+    r = http.get(url, retries=2, **kw)
     return r
 
 
@@ -228,11 +228,11 @@ def t_cftc(cfg, state):
 
 
 def t_consob(cfg, state):
-    return _http_ok("https://www.consob.it/web/area-pubblica/posizioni-nette-corte")
+    return _http_ok("https://www.consob.it/web/area-pubblica/pnc")
 
 
 def t_bafin(cfg, state):
-    return _http_ok("https://www.bundesanzeiger.de/pub/de/nlp?0")
+    return _http_ok("https://www.bundesanzeiger.de/pub/de/nlp")
 
 
 def t_afm(cfg, state):
