@@ -155,6 +155,13 @@ def t_apewisdom(cfg, state):
                     lambda d: (bool(d.get("results")), f"{len(d.get('results', []))} ticker con menzioni"))
 
 
+def t_ariva(cfg, state):
+    from collectors.forums import ariva
+    res = ariva("siemens-energy-ag-aktie")
+    return res["status"] == "ok", (f"{len(res['data'])} commenti nel feed Siemens Energy"
+                                   if res["status"] == "ok" else res["status"])
+
+
 def t_stocktwits(cfg, state):
     return _json_ok("https://api.stocktwits.com/api/2/streams/symbol/UBER.json",
                     lambda d: (bool(d.get("messages")), f"{len(d.get('messages', []))} messaggi"))
@@ -277,6 +284,7 @@ CHECKS = [
     ("Reddit OAuth (script)", "retail", t_reddit_oauth),
     ("ApeWisdom", "retail", t_apewisdom),
     ("StockTwits", "retail", t_stocktwits),
+    ("Forum ariva.de (titoli EU)", "retail", t_ariva),
     ("CNN Fear & Greed", "mercato", t_cnn_fg),
     ("CBOE VIX", "mercato", t_vix),
     ("CBOE put/call", "mercato", t_putcall),

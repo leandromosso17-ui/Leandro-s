@@ -13,6 +13,8 @@ from intel import http
 MODELS = {
     "en": "Xenova/finbert",
     "it": "Xenova/distilbert-base-multilingual-cased-sentiments-student",
+    # niente tedesco: provato sui forum ariva.de, segnava ▼ 9 commenti su 10, anche
+    # quelli rialzisti ("dann kaufe ich nach"). Meglio nessuna etichetta che una sbagliata.
 }
 FILES = ("config.json", "tokenizer.json", "onnx/model_int8.onnx")
 HF = "https://huggingface.co/{repo}/resolve/main/{file}"
@@ -86,7 +88,7 @@ def classify(cfg, items: list[dict]) -> str | None:
                 continue
             if repo not in _cache:
                 _cache[repo] = Classifier(repo, cfg.root / "models" / "sentiment")
-            for it, (label, score) in zip(batch, _cache[repo]([it["title"] for it in batch])):
+            for it, (label, score) in zip(batch, _cache[repo]([it.get("text") or it["title"] for it in batch])):
                 it["sentiment"], it["sent_score"] = label, score
     except Exception as e:  # noqa: BLE001
         return f"modello di sentiment non utilizzabile: {e}"

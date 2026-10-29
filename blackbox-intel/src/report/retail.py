@@ -40,11 +40,27 @@ def _posts(r) -> str:
     return f"{len(ps)}: ▲{c['positive']} ▬{c['neutral']} ▼{c['negative']}"
 
 
+def _forum(r, days: int) -> str:
+    f = r.get("forum")
+    if not f:
+        return "–"
+    if f["status"] != "ok":
+        return "n.d."
+    ps = f["data"]
+    if not ps:
+        last = f" (ultimo {f['last']:%d/%m/%y})" if f.get("last") else ""
+        return f"nessun post in {days}g{last}"
+    return f"{len(ps)} post in {days}g"
+
+
 def render(res: dict) -> str:
     L = ["## 🗣️ Sentiment retail", "",
          "_Menzioni Reddit: ApeWisdom, ultime 24 ore (solo USA). StockTwits: tag Bullish/Bearish messi "
          "dagli utenti sugli ultimi 30 messaggi (solo USA). Post: i più recenti nei subreddit seguiti, "
-         "titoli classificati con FinBERT locale._", ""]
+         "titoli classificati con FinBERT locale. Forum ariva.de: commenti di utenti sui titoli europei "
+         f"negli ultimi {res['forum_days']} giorni, senza etichetta di sentiment (il modello locale sbaglia "
+         "sul tedesco dei forum). Commenti di Yahoo Finance "
+         "e Investing.com non leggibili senza aggirare blocchi: non usati._", ""]
     feeds = res["feeds"]
     bad = [f"r/{s}: {f['status']}" for s, f in feeds.items() if f["status"] != "ok"]
     okf = [s for s, f in feeds.items() if f["status"] == "ok"]
@@ -54,15 +70,23 @@ def render(res: dict) -> str:
         rows = [r for r in res["rows"] if r["tipo"] == tipo]
         if not rows:
             continue
-        L += ["", f"### {label}", "", "| Titolo | Menzioni Reddit 24h | StockTwits | Post subreddit |",
-              "|---|---|---|---|"]
-        L += [f"| **{r['ticker']}** | {_ape(r)} | {_st(r)} | {_posts(r)} |" for r in rows]
+        L += ["", f"### {label}", "",
+              "| Titolo | Menzioni Reddit 24h | StockTwits | Post subreddit | Forum ariva.de |",
+              "|---|---|---|---|---|"]
+        L += [f"| **{r['ticker']}** | {_ape(r)} | {_st(r)} | {_posts(r)} | {_forum(r, res['forum_days'])} |"
+              for r in rows]
         for r in rows:
             top = sorted(r["posts"], key=lambda x: x["published"], reverse=True)[:3]
             if top:
-                L += ["", f"_{r['ticker']}, post recenti:_"]
+                L += ["", f"_{r['ticker']}, post recenti su Reddit:_"]
                 L += [f"- {ARROW.get(x.get('sentiment'), '•')} [{x['title'][:140]}]({x['link']}) — "
                       f"r/{x['sub']}, {x['published']:%d/%m}" for x in top]
+            f = r.get("forum")
+            if f and f["status"] == "ok" and f["data"]:
+                L += ["", f"_{r['ticker']}, commenti recenti su [ariva.de]({f['source_url']}) (in tedesco):_"]
+                for x in sorted(f["data"], key=lambda x: x["published"], reverse=True)[:3]:
+                    snippet = x["body"][:160] + ("…" if len(x["body"]) > 160 else "")
+                    L.append(f"- **{x['title'][:80]}**: {snippet} — {x['published']:%d/%m}")
 
     m = res["market"]
     L += ["", "## 🌡️ Mercato", ""]

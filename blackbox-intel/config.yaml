@@ -49,6 +49,15 @@ retail:
   # Reddit RSS senza login: ~1 richiesta al minuto, quindi ogni subreddit costa ~1 minuto di run.
   subreddit: [stocks, investing, wallstreetbets, StockMarket, ItaliaPersonalFinance]
   subreddit_it: [ItaliaPersonalFinance]   # titoli classificati col modello italiano
+  # Forum ariva.de per i titoli europei (ApeWisdom e StockTwits coprono solo gli USA).
+  # Slug verificati a mano il 29/10/2026: https://www.ariva.de/forum/<slug>/
+  # Gli ETF su ariva non hanno forum. Yahoo, Investing.com e FinanzaOnline: non leggibili senza aggirare blocchi.
+  forum_days: 30
+  ariva:
+    PRY.MI: prysmian-spa-aktie
+    ENR.DE: siemens-energy-ag-aktie
+    BESI.AS: be-semiconductor-industries-nv-aktie
+    DNR.MI: de-nora-spa-aktie
 
 # "Top 3 banche" per titolo: prima queste, nell'ordine; se sono meno di 3 si completa
 # con le case più recenti. alias = come compaiono su Yahoo e nei titoli di news.
