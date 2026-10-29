@@ -40,10 +40,27 @@ llm:
   # Include il thinking di Haiku, che non si spegne (1-12k token misurati). Oltre il tetto
   # claude -p spezza la risposta in più turni e il JSON si perde: meglio un tetto largo.
   max_output_tokens_podcast: 16000
-  max_output_tokens_final: 2500
+  max_output_tokens_final: 16000   # include il thinking di Haiku, come per il podcast
 
 news:
   days: 7   # finestra di Google News per ticker
+
+polymarket:
+  # temi macro cercati su Polymarket, oltre ai nomi dei titoli (questi solo se il titolo dell'evento li cita)
+  temi: [Fed, tariffs, Brazil, China, copper, recession, Israel, Iran, Ukraine]
+  eventi_per_tema: 3
+  volume_minimo_24h: 100   # in dollari: sotto, mercato troppo sottile per contare
+
+utili:
+  giorni: 14
+
+portfolio:
+  giorni_correlazione: 90
+
+output:
+  notion: true      # serve NOTION_TOKEN e NOTION_PAGE_ID in .env
+  html: true
+  notifica: true
 
 retail:
   # Reddit RSS senza login: ~1 richiesta al minuto, quindi ogni subreddit costa ~1 minuto di run.
@@ -95,9 +112,9 @@ tickers:
   UBER:    {alias: [uber], temi: [mobilita, software_ai]}
   NOW:     {alias: [servicenow, service now], temi: [software_ai]}
   # ETF/ETC: prezzi del sottostante e news sul sottostante (nessuna copertura analisti)
-  COPA.L:  {alias: [], temi: [rame], sottostanti: [HG=F],
+  COPA.L:  {alias: [], temi: [rame], sottostanti: [HG=F], settore: Materie prime (rame), paese: Globale,
             news_query: {en: [copper price], it: [prezzo rame]}}
-  4BRZ.DE: {alias: [], temi: [brasile], sottostanti: ["^BVSP", "BRL=X"],
+  4BRZ.DE: {alias: [], temi: [brasile], sottostanti: ["^BVSP", "BRL=X"], settore: Azionario Brasile, paese: Brazil,
             news_query: {en: [Brazil stocks Bovespa, Brazilian real], it: [Borsa Brasile, real brasiliano]}}
   DNR.MI:  {alias: [de nora], temi: [cavi_energia]}
   NET:     {alias: [cloudflare], temi: [software_ai]}

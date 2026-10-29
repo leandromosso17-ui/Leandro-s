@@ -111,5 +111,44 @@ def test_match_posts():
     assert titles(copa) == ["Copper hits record", "Rame: che ne pensate?"]
 
 
+def test_eu_shorts_latest_per_holder():
+    from collectors.positioning import eu_shorts_for
+    rows = [{"holder": "A", "issuer": "BE Semiconductor Industries N.V.", "isin": "", "pct": 0.63, "date": "2026-10-27"},
+            {"holder": "A", "issuer": "BE Semiconductor Industries N.V.", "isin": "", "pct": 0.52, "date": "2026-10-22"},
+            {"holder": "B", "issuer": "BE Semiconductor Industries N.V.", "isin": "", "pct": 0.80, "date": "2026-09-01"},
+            {"holder": "B", "issuer": "BE Semiconductor Industries N.V.", "isin": "", "pct": 0.45, "date": "2026-10-01"},
+            {"holder": "C", "issuer": "Akzo Nobel N.V.", "isin": "", "pct": 1.0, "date": "2026-10-27"},
+            {"holder": "D", "issuer": None, "isin": "", "pct": 1.0, "date": "2026-10-27"}]
+    out = eu_shorts_for(rows, ["BE Semiconductor"])
+    assert [(x["holder"], x["pct"]) for x in out] == [("A", 0.63)]   # B è sceso sotto lo 0,5%
+
+
+def test_insider_cluster():
+    from analysis.positioning import insider_summary
+    rows = [{"name": n, "side": "acquisto", "value": 1.0, "date": "2026-10-01"} for n in ("a", "b", "c")]
+    assert insider_summary(rows)["cluster"] == "acquisti"
+    assert insider_summary(rows[:2])["cluster"] is None
+
+
+def test_pearson():
+    from analysis.portfolio import _pearson
+    a = [float(i % 7) for i in range(30)]
+    assert abs(_pearson(a, a) - 1) < 1e-9 and abs(_pearson(a, [-x for x in a]) + 1) < 1e-9
+    assert _pearson(a[:10], a[:10]) is None   # troppo pochi giorni
+
+
+def test_markdown_outputs():
+    from report.html import to_html
+    from report.notion import to_blocks
+    md = "## Titolo\n- **UBER** ▲ +1.0% · [Yahoo](https://x.y/z)\n  - sotto\n\n| A | B |\n|---|---|\n| 1 | 2 |\n> 📅 OGGI utili"
+    h = to_html(md, "t")
+    assert "<h2>Titolo</h2>" in h and '<a href="https://x.y/z">Yahoo</a>' in h and "<td>2</td>" in h
+    b = to_blocks(md)
+    assert [x["type"] for x in b] == ["heading_2", "bulleted_list_item", "table", "callout"]
+    assert b[1]["bulleted_list_item"]["children"][0]["type"] == "bulleted_list_item"
+    assert b[1]["bulleted_list_item"]["rich_text"][0]["annotations"] == {"bold": True}
+    assert b[2]["table"]["table_width"] == 2 and len(b[2]["table"]["children"]) == 2
+
+
 def test_parse_json_fenced():
     assert parse_json('```json\n{"sintesi": ["a"]}\n```') == {"sintesi": ["a"]}

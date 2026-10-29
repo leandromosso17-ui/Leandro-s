@@ -88,8 +88,12 @@ def render(res: dict) -> str:
                     snippet = x["body"][:160] + ("…" if len(x["body"]) > 160 else "")
                     L.append(f"- **{x['title'][:80]}**: {snippet} — {x['published']:%d/%m}")
 
-    m = res["market"]
-    L += ["", "## 🌡️ Mercato", ""]
+    L += ["", "## 🌡️ Mercato", ""] + render_market(res["market"])
+    return "\n".join(L)
+
+
+def render_market(m: dict) -> list[str]:
+    L = []
     fg = m["fg"]
     if fg["status"] == "ok":
         d = fg["data"]
@@ -118,4 +122,18 @@ def render(res: dict) -> str:
                  f"{_arrow(up)} _(più put = più protezione comprata)_ · [CBOE]({pc['source_url']})")
     else:
         L.append(f"- **Put/call CBOE** {pc['status']}")
-    return "\n".join(L)
+    return L
+
+
+def retail_detail(r: dict) -> list[str]:
+    """Post Reddit e commenti ariva.de di un titolo, per il dettaglio nel digest."""
+    L = []
+    for x in sorted(r["posts"], key=lambda x: x["published"], reverse=True)[:3]:
+        L.append(f"  - {ARROW.get(x.get('sentiment'), '•')} [{x['title'][:140]}]({x['link']}) — "
+                 f"r/{x['sub']}, {x['published']:%d/%m}")
+    f = r.get("forum")
+    if f and f["status"] == "ok":
+        for x in sorted(f["data"], key=lambda x: x["published"], reverse=True)[:3]:
+            snippet = x["body"][:160] + ("…" if len(x["body"]) > 160 else "")
+            L.append(f"  - ariva.de (de): **{x['title'][:80]}**: {snippet} — {x['published']:%d/%m}")
+    return L

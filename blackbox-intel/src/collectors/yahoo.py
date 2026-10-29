@@ -56,6 +56,23 @@ def prices(ticker: str) -> dict:
     }, f"https://finance.yahoo.com/quote/{ticker}")
 
 
+def history(ticker: str, range_: str = "6mo") -> dict:
+    """Chiusure giornaliere {data: close} per le correlazioni."""
+    url = CHART.format(t=ticker)
+    try:
+        r = http.get(url, params={"range": range_, "interval": "1d"}, min_interval=RATE)
+        res = (r.json().get("chart", {}).get("result") or [None])[0]
+    except Exception as e:  # noqa: BLE001
+        return unavailable(f"Yahoo chart: {e}", url)
+    if not res:
+        return unavailable("Yahoo chart: nessun dato", url)
+    tz = ZoneInfo(res["meta"].get("exchangeTimezoneName") or "UTC")
+    closes = {datetime.fromtimestamp(ts, tz).date(): c
+              for ts, c in zip(res.get("timestamp") or [], res["indicators"]["quote"][0].get("close") or [])
+              if c is not None}
+    return ok(closes, f"https://finance.yahoo.com/quote/{ticker}/history")
+
+
 def _auth() -> tuple[requests.Session, str]:
     global _session, _crumb
     if _session is None or not _crumb:
@@ -103,4 +120,38 @@ def analysts(ticker: str) -> dict:
         "consensus": {"key": fd.get("recommendationKey"), "target_mean": raw(fd, "targetMeanPrice"),
                       "target_low": raw(fd, "targetLowPrice"), "target_high": raw(fd, "targetHighPrice"),
                       "n": raw(fd, "numberOfAnalystOpinions"), "currency": fd.get("financialCurrency", "")},
+    }, f"https://finance.yahoo.com/quote/{ticker}/analysis")
+
+
+def profile(ticker: str) -> dict:
+    """Date degli utili (confermate o stimate), ultimo trimestre EPS effettivo vs atteso,
+    settore e paese. Una sola chiamata quoteSummary per i Moduli 6 e 7."""
+    url = SUMMARY.format(t=ticker)
+    try:
+        s, crumb = _auth()
+        r = http.get(url, session=s, headers={"User-Agent": BROWSER_UA}, min_interval=RATE,
+                     params={"modules": "calendarEvents,assetProfile,earningsHistory", "crumb": crumb})
+        if r.status_code == 404:
+            return unavailable("Yahoo non ha dati societari per questo strumento", url)
+        r.raise_for_status()
+        res = (r.json().get("quoteSummary", {}).get("result") or [{}])[0]
+    except Exception as e:  # noqa: BLE001
+        return unavailable(f"Yahoo quoteSummary: {e}", url)
+    ce = (res.get("calendarEvents") or {}).get("earnings") or {}
+    ap = res.get("assetProfile") or {}
+    hist = (res.get("earningsHistory") or {}).get("history") or []
+    last = hist[-1] if hist else {}
+
+    def raw(d, k):
+        v = (d or {}).get(k)
+        return v.get("raw") if isinstance(v, dict) else v
+
+    dates = [datetime.fromtimestamp(d["raw"], ZoneInfo("UTC")).date()
+             for d in ce.get("earningsDate") or [] if isinstance(d, dict) and d.get("raw")]
+    return ok({
+        "earnings_dates": dates, "earnings_estimated": bool(ce.get("isEarningsDateEstimate")),
+        "eps_estimate_next": raw(ce, "earningsAverage"), "revenue_estimate_next": raw(ce, "revenueAverage"),
+        "last_quarter": (last.get("quarter") or {}).get("fmt"), "last_eps": raw(last, "epsActual"),
+        "last_eps_est": raw(last, "epsEstimate"), "last_surprise_pct": raw(last, "surprisePercent"),
+        "sector": ap.get("sector"), "industry": ap.get("industry"), "country": ap.get("country"),
     }, f"https://finance.yahoo.com/quote/{ticker}/analysis")

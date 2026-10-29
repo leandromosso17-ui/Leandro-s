@@ -36,7 +36,9 @@ def process_episode(cfg, state, ep) -> dict:
 
     cached = state.get_episode(ep.guid)
     tr, method, tried = get_transcript(cfg, ep)
-    out = {"title": ep.title, "slot": ep.slot, "published": ep.published, "link": ep.link,
+    # il feed non ha <link>: il video YouTube da cui viene la trascrizione, altrimenti l'mp3
+    link = ep.link or (tr["source_url"] if str(tr["source_url"]).startswith("http") else "") or ep.audio_url
+    out = {"title": ep.title, "slot": ep.slot, "published": ep.published, "link": link,
            "method": method, "tried": tried, "transcript_status": tr["status"],
            "transcript_url": tr["source_url"], "names": {p.ticker: p.nome for p in cfg.positions}}
     if tr["status"] != "ok":
@@ -211,23 +213,31 @@ def cmd_run(cfg, state, args):
     state.start_run(today, args.slot)
     status = "error"
     try:
-        ep = _wait_for_episode(cfg, state, args.slot, tz)
-        if ep:
-            md = render_episode_md(process_episode(cfg, state, ep))
-            trend = render_bubble_trend(state)
-            md = f"{trend}\n\n{md}" if trend else md
-        else:
-            md = f"### Puntata {args.slot}: non ancora disponibile dopo {cfg.section('podcast').get('max_wait_minutes', 120)} minuti di attesa."
-        from analysis.tickers import analyze_all
-        from report.tickers import render as render_tickers
-        md += "\n\n" + render_tickers(analyze_all(cfg, state))
-        from analysis.retail import collect as collect_retail
-        from report.retail import render as render_retail
-        md += "\n\n" + render_retail(collect_retail(cfg, state))
-        # Moduli 4-7, Notion e HTML: in arrivo, un modulo alla volta.
+        from intel import notify, pipeline
+        from report import html as H
+        from report import notion as N
+
+        md, ctx = pipeline.build(cfg, state, args.slot, wait=not args.no_wait)
         out = cfg.data_dir / f"{today}-{args.slot}.md"
+        title = f"Market Intel {today} {args.slot}"
+        done = []
+        oc = cfg.section("output")
+        if oc.get("html", True):
+            cfg.reports_dir.mkdir(parents=True, exist_ok=True)
+            page = cfg.reports_dir / f"{today}-{args.slot}.html"
+            page.write_text(H.to_html(md, title), encoding="utf-8")
+            done.append(f"HTML: {page}")
+        if oc.get("notion", True):
+            done.append(N.publish(md, title))
+        md += "\n- **Uscite** " + " · ".join(done) if done else ""
         out.write_text(md, encoding="utf-8")
-        print(md + f"\n\nSalvato in {out}")
+        if oc.get("html", True):  # riscrive l'HTML con la riga delle uscite
+            page.write_text(H.to_html(md, title), encoding="utf-8")
+        if oc.get("notifica", True):
+            n_flags = len((ctx["final"] or {}).get("tesi_a_rischio") or [])
+            done.append(notify.toast(f"Market Intel {args.slot} pronto",
+                                     f"{len(ctx['episodes'])} puntate · {n_flags} tesi a rischio · {page.name if oc.get('html', True) else out.name}"))
+        print(md + f"\n\nSalvato in {out}\n" + "\n".join(done))
         status = "ok"
     finally:
         state.finish_run(today, args.slot, status)
@@ -252,6 +262,7 @@ def main(argv=None):
     r = sub.add_parser("run", help="run completo di uno slot")
     r.add_argument("--slot", choices=["mattina", "sera"], required=True)
     r.add_argument("--force", action="store_true", help="ignora il limite di 2 run al giorno (solo per test)")
+    r.add_argument("--no-wait", action="store_true", help="non aspettare la puntata di oggi (solo per test)")
     sub.add_parser("tokens", help="totale token degli ultimi 7 giorni")
     n = sub.add_parser("news", help="Modulo 2: prezzi, news e banche per ogni titolo")
     n.add_argument("--only", help="solo un ticker, es. UBER")
