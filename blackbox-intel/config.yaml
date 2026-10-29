@@ -45,6 +45,11 @@ llm:
 news:
   days: 7   # finestra di Google News per ticker
 
+retail:
+  # Reddit RSS senza login: ~1 richiesta al minuto, quindi ogni subreddit costa ~1 minuto di run.
+  subreddit: [stocks, investing, wallstreetbets, StockMarket, ItaliaPersonalFinance]
+  subreddit_it: [ItaliaPersonalFinance]   # titoli classificati col modello italiano
+
 # "Top 3 banche" per titolo: prima queste, nell'ordine; se sono meno di 3 si completa
 # con le case più recenti. alias = come compaiono su Yahoo e nei titoli di news.
 banche:

@@ -160,6 +160,16 @@ def cmd_news(cfg, state, args):
     return 0
 
 
+def cmd_retail(cfg, state, args):
+    from analysis.retail import collect
+    from report.retail import render
+    md = render(collect(cfg, state, args.only))
+    out = cfg.data_dir / f"retail-{datetime.now():%Y-%m-%d-%H%M}.md"
+    out.write_text(md, encoding="utf-8")
+    print("\n" + md + f"\n\nSalvato in {out}")
+    return 0
+
+
 def _wait_for_episode(cfg, state, slot: str, tz) -> object | None:
     """Controlla il feed (zero token); se la puntata di oggi manca, riprova ogni N minuti."""
     from collectors.podcast import discover_feed, fetch_episodes
@@ -211,7 +221,10 @@ def cmd_run(cfg, state, args):
         from analysis.tickers import analyze_all
         from report.tickers import render as render_tickers
         md += "\n\n" + render_tickers(analyze_all(cfg, state))
-        # Moduli 3-7, Notion e HTML: in arrivo, un modulo alla volta.
+        from analysis.retail import collect as collect_retail
+        from report.retail import render as render_retail
+        md += "\n\n" + render_retail(collect_retail(cfg, state))
+        # Moduli 4-7, Notion e HTML: in arrivo, un modulo alla volta.
         out = cfg.data_dir / f"{today}-{args.slot}.md"
         out.write_text(md, encoding="utf-8")
         print(md + f"\n\nSalvato in {out}")
@@ -242,12 +255,14 @@ def main(argv=None):
     sub.add_parser("tokens", help="totale token degli ultimi 7 giorni")
     n = sub.add_parser("news", help="Modulo 2: prezzi, news e banche per ogni titolo")
     n.add_argument("--only", help="solo un ticker, es. UBER")
+    rt = sub.add_parser("retail", help="Modulo 3: sentiment retail e indicatori di mercato")
+    rt.add_argument("--only", help="solo un ticker, es. UBER")
     args = p.parse_args(argv)
 
     cfg = config.load()
     state = State(cfg.data_dir / "state.sqlite")
     handler = {"test-sources": cmd_test_sources, "podcast": cmd_podcast,
-               "run": cmd_run, "tokens": cmd_tokens, "news": cmd_news}[args.cmd]
+               "run": cmd_run, "tokens": cmd_tokens, "news": cmd_news, "retail": cmd_retail}[args.cmd]
     sys.exit(handler(cfg, state, args) or 0)
 
 

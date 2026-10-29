@@ -96,5 +96,20 @@ def test_top_banks_priority_and_timeline():
     assert bofa["direction"] == "più rialzista" and bofa["current"]["date"] == date(2026, 9, 1)
 
 
+def test_match_posts():
+    from analysis.retail import match_posts
+    cfg = SimpleNamespace(raw={"themes": {"rame": ["rame", "copper"]},
+                               "tickers": {"COPA.L": {"sottostanti": ["HG=F"]}}})
+    now_ = SimpleNamespace(ticker="NOW", nome="ServiceNow", alias=["servicenow"], temi=[])
+    uber = SimpleNamespace(ticker="UBER", nome="Uber", alias=["uber"], temi=[])
+    copa = SimpleNamespace(ticker="COPA.L", nome="WisdomTree Copper", alias=[], temi=["rame"])
+    posts = [{"title": t} for t in ("Buy NOW or wait?", "$NOW earnings crash", "ServiceNow down 25%",
+                                    "UBER robotaxi plans", "Copper hits record", "Rame: che ne pensate?")]
+    titles = lambda p: [x["title"] for x in match_posts(cfg, p, posts)]
+    assert titles(now_) == ["$NOW earnings crash", "ServiceNow down 25%"]
+    assert titles(uber) == ["UBER robotaxi plans"]
+    assert titles(copa) == ["Copper hits record", "Rame: che ne pensate?"]
+
+
 def test_parse_json_fenced():
     assert parse_json('```json\n{"sintesi": ["a"]}\n```') == {"sintesi": ["a"]}

@@ -2,7 +2,7 @@
 
 Market intelligence locale e gratuita: due run al giorno dopo le puntate di Black Box, digest su Notion e in HTML. Non è un sistema di trading.
 
-Stato: **Modulo 1 (podcast), Modulo 2 (news e banche) e `test-sources` pronti.** Moduli 3-7, Notion, HTML e scheduling arrivano uno alla volta.
+Stato: **Moduli 1 (podcast), 2 (news e banche), 3 (retail e mercato) e `test-sources` pronti.** Moduli 4-7, Notion, HTML e scheduling arrivano uno alla volta.
 
 ## Setup su Windows
 
@@ -31,7 +31,8 @@ Se `uv sync` dà «Accesso negato» su `.venv`, è OneDrive che sincronizza la c
 | `uv run intel test-sources` | Una chiamata reale per ogni fonte, tabella sì/no con motivo |
 | `uv run intel podcast --last 2` | Modulo 1 sulle ultime N puntate |
 | `uv run intel news` (`--only UBER`) | Modulo 2: prezzi, news con sentiment, banche (zero token) |
-| `uv run intel run --slot mattina` / `--slot sera` | Run di uno slot (podcast + Modulo 2) |
+| `uv run intel retail` (`--only UBER`) | Modulo 3: ApeWisdom, StockTwits, Reddit RSS, Fear & Greed, VIX, put/call (zero token) |
+| `uv run intel run --slot mattina` / `--slot sera` | Run di uno slot (podcast + Moduli 2-3) |
 | `uv run intel tokens` | Token degli ultimi 7 giorni (da `logs/tokens.csv`) |
 
 ## Spazio su disco
@@ -49,4 +50,5 @@ Se `uv sync` dà «Accesso negato» su `.venv`, è OneDrive che sincronizza la c
 - Temi e alias per i collegamenti podcast → titoli: `config.yaml`, sezioni `themes` e `tickers`.
 - Banche «top 3» per titolo: `config.yaml`, sezione `banche` (ordine = priorità). Storico da Yahoo (solo USA) più i titoli di Google News, accumulati in `data/state.sqlite` a ogni run.
 - Errori ricorrenti dei sottotitoli: `config.yaml`, `podcast.correzioni`.
+- Subreddit seguiti: `config.yaml`, `retail.subreddit`. Senza login Reddit concede ~1 richiesta al minuto: ogni subreddit aggiunge ~1 minuto al run.
 - Se una fonte smette di funzionare, `uv run intel test-sources` dice quale e perché.
