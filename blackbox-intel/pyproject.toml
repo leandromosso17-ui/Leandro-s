@@ -1,0 +1,33 @@
+[project]
+name = "blackbox-intel"
+version = "0.1.0"
+description = "Market intelligence locale: podcast Black Box + digest su Notion"
+requires-python = ">=3.12"
+# Dipendenze minime: niente torch. I modelli pesanti sono extra opzionali.
+dependencies = [
+    "requests>=2.32",
+    "defusedxml>=0.7",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "yt-dlp>=2026.10.26",
+]
+
+[project.optional-dependencies]
+# Solo se mancano sia i sottotitoli YouTube sia la trascrizione nel feed.
+whisper = ["faster-whisper>=1.2.1"]
+
+[project.scripts]
+intel = "intel.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/intel", "src/collectors", "src/analysis", "src/report"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

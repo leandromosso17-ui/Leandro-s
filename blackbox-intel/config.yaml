@@ -1,0 +1,56 @@
+# Configurazione blackbox-intel. I segreti vanno in .env, non qui.
+
+timezone: Europe/Rome
+portfolio_csv: portfolio.csv
+# Cartella dei report HTML. "~" = %USERPROFILE% su Windows.
+reports_dir: ~/blackbox-intel/reports
+
+podcast:
+  apple_id: 1648334875
+  # Lascia vuoto: viene scoperto da itunes lookup e salvato in SQLite.
+  feed_url: ""
+  # Canale YouTube; se vuoto si cerca la puntata per titolo con yt-dlp.
+  youtube_channel_url: ""
+  morning_suffix: "| Morning Finance"
+  # Attesa della puntata dentro lo stesso run.
+  retry_minutes: 15
+  max_wait_minutes: 120
+  # Taglio della trascrizione prima dell'LLM (caratteri, ~4 char/token).
+  max_transcript_chars: 60000
+  whisper_model: base   # tiny ~75MB, base ~145MB, small ~480MB
+
+llm:
+  engine: claude        # claude | ollama
+  claude_model_cheap: haiku
+  claude_model_final: haiku
+  ollama_url: http://localhost:11434
+  ollama_model: qwen2.5:7b
+  max_output_tokens_podcast: 1500
+  max_output_tokens_final: 2500
+
+# Collegamenti podcast -> titoli, calcolati in Python (zero token).
+# alias = citazione diretta; temi = toccato da un settore/tema.
+themes:
+  rame: [rame, copper, metalli industriali, cile, codelco, freeport]
+  brasile: [brasile, brazil, real brasiliano, lula, bovespa, petrobras, america latina]
+  semiconduttori: [semiconduttor, chip, nvidia, tsmc, asml, packaging avanzato, hybrid bonding]
+  cavi_energia: [cavi, rete elettrica, reti elettriche, elettrificazione, data center, energia, trasmissione, idrogeno, turbine]
+  software_ai: [software, intelligenza artificiale, " ai ", " ia ", saas, cloud, agenti, llm, openai, anthropic]
+  spazio: [spazio, satellit, razz, spacex, lanci]
+  quantum: [quantum, quantistic]
+  mobilita: [ride hailing, robotaxi, guida autonoma, waymo, tesla]
+
+tickers:
+  UBER:    {alias: [uber], temi: [mobilita, software_ai]}
+  NOW:     {alias: [servicenow, service now], temi: [software_ai]}
+  COPA.L:  {alias: [], temi: [rame]}
+  4BRZ.DE: {alias: [], temi: [brasile]}
+  DNR.MI:  {alias: [de nora], temi: [cavi_energia]}
+  NET:     {alias: [cloudflare], temi: [software_ai]}
+  CLS:     {alias: [celestica], temi: [semiconduttori, software_ai]}
+  BESI.AS: {alias: [besi, be semiconductor], temi: [semiconduttori]}
+  PRY.MI:  {alias: [prysmian], temi: [cavi_energia]}
+  ENR.DE:  {alias: [siemens energy], temi: [cavi_energia]}
+  SNPS:    {alias: [synopsys], temi: [semiconduttori, software_ai]}
+  RKLB:    {alias: [rocket lab], temi: [spazio]}
+  RGTI:    {alias: [rigetti], temi: [quantum]}
