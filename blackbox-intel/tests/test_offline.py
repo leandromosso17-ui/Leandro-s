@@ -1,7 +1,7 @@
 """Test offline della logica pura (nessuna rete, nessun token)."""
 from types import SimpleNamespace
 
-from analysis.podcast import link_tickers
+from analysis.podcast import fix_names, link_tickers
 from analysis.transcript import clean_any
 from collectors.podcast import slot_of
 from intel.llm import parse_json
@@ -45,6 +45,12 @@ def test_link_tickers():
     assert links["PRY.MI"]["tipo"] == "citato direttamente"
     assert links["COPA.L"]["tipo"] == "toccato da tema" and links["COPA.L"]["timestamp"] == ["01:05"]
     assert "RGTI" not in links
+
+
+def test_fix_names():
+    cfg = SimpleNamespace(section=lambda name: {"correzioni": {"high trade": "AI trade", "cora media": "Chora Media"}})
+    assert fix_names(cfg, "[00:10] l'High trade riparte, lo dice Cora Media; highlights") == \
+        "[00:10] l'AI trade riparte, lo dice Chora Media; highlights"
 
 
 def test_parse_json_fenced():

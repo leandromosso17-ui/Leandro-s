@@ -8,7 +8,7 @@ import re
 from intel import llm
 
 # Cambia quando cambia lo schema del JSON: le sintesi in cache con un'altra versione si rigenerano.
-PROMPT_VERSION = 2
+PROMPT_VERSION = 4
 
 PROMPT = """Trascrizione della puntata "{title}" ({date}) del podcast Black Box{kind}.
 I marcatori [mm:ss] sono i timestamp.
@@ -26,7 +26,18 @@ Restituisci questo JSON:
                "come_la_descrivono": "1-2 frasi: in che fase vedono il ciclo dell'IA",
                "segnali_di_scoppio": [{{"timestamp": "mm:ss", "concetto": "..."}}],
                "segnali_di_tenuta": [{{"timestamp": "mm:ss", "concetto": "..."}}]}},
+  "nomi_corretti": [{{"trascritto": "come appare nel testo", "corretto": "nome reale",
+                     "perche": "quale contesto della puntata lo conferma"}}],
   "non_chiaro": ["passaggi incomprensibili o ambigui, se ce ne sono"]}}
+
+La trascrizione viene da sottotitoli automatici: nomi di società, persone e prodotti sono spesso
+storpiati. Quando un nome non torna, confrontalo con nomi reali simili e scegli quello coerente con
+il contesto della puntata (settore, prodotto, numeri, chi ne parla). Se il contesto lo conferma, usa
+il nome corretto in TUTTO il JSON e registra la correzione in "nomi_corretti". Se non sei sicuro,
+lascia il nome come trascritto e segnalalo in "non_chiaro". In "nomi_corretti" metti SOLO i nomi
+che hai davvero cambiato (massimo 10), mai quelli già giusti.
+Questi nomi sono sicuramente corretti, non cambiarli: {glossario}.
+Questa è l'unica eccezione alla regola "niente conoscenze esterne".
 
 "tuoi_asset": solo i titoli dell'elenco di cui si parla, direttamente o tramite il loro paese, settore
 o materia prima (es. Brasile per l'ETF Brasile, rame per l'ETC rame). Qui NON sintetizzare: riporta
@@ -50,6 +61,13 @@ def _assets_block(cfg) -> str:
     return "\n".join(f"- {p.ticker}: {p.nome} ({p.tipo})" for p in cfg.positions)
 
 
+def fix_names(cfg, text: str) -> str:
+    """Errori ricorrenti dei sottotitoli da config.yaml (podcast.correzioni), zero token."""
+    for wrong, right in (cfg.section("podcast").get("correzioni") or {}).items():
+        text = re.sub(r"\b" + re.escape(str(wrong)) + r"\b", str(right), text, flags=re.I)
+    return text
+
+
 def summarize(cfg, state, ep, transcript: str, method: str) -> dict:
     """Sintesi in cache: una puntata già elaborata non si rielabora mai."""
     cached = state.get_episode(ep.guid)
@@ -60,21 +78,34 @@ def summarize(cfg, state, ep, transcript: str, method: str) -> dict:
     sera = ep.slot == "sera"
     prompt = PROMPT.format(title=ep.title, date=ep.published.strftime("%d/%m/%Y"),
                            kind=" (puntata serale, Guido Brera e Raffaele Coriglione)" if sera else ", Morning Finance",
-                           assets=_assets_block(cfg), tesi=TESI if sera else "", text=transcript[:max_chars])
+                           assets=_assets_block(cfg), tesi=TESI if sera else "",
+                           glossario=", ".join(cfg.section("podcast").get("glossario") or []),
+                           text=transcript[:max_chars])
     max_out = cfg.section("llm").get("max_output_tokens_podcast", 1500)
-    res = llm.call(cfg, prompt, purpose=f"podcast-{ep.slot}", cheap=True, max_out=max_out)
+    # la risposta grezza resta su disco: senza non si capisce perché il JSON è rotto
+    dump = cfg.data_dir / f"llm-fail-{ep.published:%Y%m%d-%H%M}-{ep.slot}.json"
+
+    def save_dump(e, r):
+        dump.write_text(json.dumps({"error": str(e), "text": r.text, "meta": r.meta},
+                                   ensure_ascii=False, indent=1), encoding="utf-8")
+
+    try:
+        res = llm.call(cfg, prompt, purpose=f"podcast-{ep.slot}", cheap=True, max_out=max_out)
+    except llm.LLMError as e:
+        if e.res:
+            save_dump(e, e.res)
+        raise
     try:
         summary = llm.parse_json(res.text)
     except (ValueError, llm.LLMError) as e:
-        # la risposta grezza resta su disco: senza non si capisce perché il JSON è rotto
-        dump = cfg.data_dir / f"llm-fail-{ep.published:%Y%m%d-%H%M}-{ep.slot}.json"
-        dump.write_text(json.dumps({"error": str(e), "text": res.text, "meta": res.meta},
-                                   ensure_ascii=False, indent=1), encoding="utf-8")
+        save_dump(e, res)
         summary = {"sintesi": [], "non_chiaro": [f"risposta del modello non in JSON ({e}): sintesi non disponibile, "
                                                  f"risposta grezza in {dump.name}"]}
     if truncated:
         summary.setdefault("non_chiaro", []).append(
             f"trascrizione tagliata a {max_chars} caratteri su {len(transcript)}")
+    summary["nomi_corretti"] = [n for n in summary.get("nomi_corretti") or []
+                                if str(n.get("trascritto", "")).strip().lower() != str(n.get("corretto", "")).strip().lower()]
     if summary.get("sintesi"):
         summary["_v"] = PROMPT_VERSION
         state.save_episode(ep.guid, ep.title, ep.published.isoformat(), ep.slot, method,

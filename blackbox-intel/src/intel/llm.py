@@ -53,12 +53,14 @@ def _claude(prompt: str, model: str, max_out: int) -> LLMResult:
     exe = find_claude()
     if not exe:
         raise LLMError("comando `claude` non trovato nel PATH né in ~/.local/bin")
-    # --effort low: il thinking (~3k token misurati) consuma il tetto di output
-    # e per una sintesi non serve. MAX_THINKING_TOKENS=0 da solo non lo spegne.
+    # Il thinking di Haiku conta nel tetto di output (misurati 1-12k token per puntata).
+    # --effort low lo riduce; MAX_THINKING_TOKENS=0, CLAUDE_CODE_DISABLE_THINKING,
+    # CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING e alwaysThinkingEnabled=false non lo spengono
+    # (provati su claude 2.1.312). Per questo il tetto in config.yaml è largo.
     cmd = [exe, "-p", "--model", model, "--output-format", "json", "--effort", "low",
            "--tools", "", "--system-prompt", SYSTEM, "--strict-mcp-config",
            "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence"]
-    env = dict(os.environ, CLAUDE_CODE_MAX_OUTPUT_TOKENS=str(max_out), MAX_THINKING_TOKENS="0")
+    env = dict(os.environ, CLAUDE_CODE_MAX_OUTPUT_TOKENS=str(max_out))
     # Il prompt passa da stdin: niente limiti di lunghezza della riga di comando su Windows.
     p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding="utf-8",
                        env=env, timeout=600)
@@ -104,7 +106,7 @@ def call(cfg, prompt: str, *, purpose: str, cheap: bool, max_out: int) -> LLMRes
         # Tetto di output superato: claude -p continua da solo e `result` contiene
         # solo l'ultimo pezzo, cioè JSON spezzato. Meglio un errore chiaro.
         raise LLMError(f"risposta spezzata in {turns} turni (tetto di {max_out} token di output superato): "
-                       f"alza llm.max_output_tokens_* in config.yaml")
+                       f"alza llm.max_output_tokens_* in config.yaml", res)
     return res
 
 

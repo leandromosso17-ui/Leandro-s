@@ -19,6 +19,17 @@ podcast:
   # Taglio della trascrizione prima dell'LLM (caratteri, ~4 char/token).
   max_transcript_chars: 60000
   whisper_model: base   # tiny ~75MB, base ~145MB, small ~480MB
+  # Nomi sicuramente giusti: l'LLM non li "corregge" mai (si aggiungono i nomi del portfolio).
+  glossario: [Black Box, Chora Media, Chora News, Guido Brera, Raffaele Coriglione, Morning Finance]
+  # Errori ricorrenti dei sottotitoli, corretti in Python prima dell'LLM (zero token).
+  # Chiave = frase sbagliata (maiuscole indifferenti, parola intera), valore = frase giusta.
+  correzioni:
+    high trade: AI trade
+    cora media: Chora Media
+    cora news: Chora News
+    corriglione: Coriglione
+    goriaglione: Coriglione
+    cospi: Kospi
 
 llm:
   engine: claude        # claude | ollama
@@ -26,8 +37,9 @@ llm:
   claude_model_final: haiku
   ollama_url: http://localhost:11434
   ollama_model: qwen2.5:7b
-  # La sera (12 segnali con citazioni) supera 1500: oltre il tetto claude -p spezza il JSON.
-  max_output_tokens_podcast: 4000
+  # Include il thinking di Haiku, che non si spegne (1-12k token misurati). Oltre il tetto
+  # claude -p spezza la risposta in più turni e il JSON si perde: meglio un tetto largo.
+  max_output_tokens_podcast: 16000
   max_output_tokens_final: 2500
 
 # Collegamenti podcast -> titoli, calcolati in Python (zero token).

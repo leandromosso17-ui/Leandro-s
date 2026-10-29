@@ -31,7 +31,7 @@ def cmd_test_sources(cfg, state, args):
 
 
 def process_episode(cfg, state, ep) -> dict:
-    from analysis.podcast import link_tickers, summarize
+    from analysis.podcast import fix_names, link_tickers, summarize
     from collectors.podcast import get_transcript
 
     cached = state.get_episode(ep.guid)
@@ -43,7 +43,7 @@ def process_episode(cfg, state, ep) -> dict:
         if cached:  # trascrizione non più scaricabile ma sintesi già in cache
             out["summary"] = {**cached["summary"], "_cached": True, "_tokens_in": 0, "_tokens_out": 0}
         return out
-    text = tr["data"]
+    text = fix_names(cfg, tr["data"])
     out["transcript_chars"] = len(text)
     out["links"] = link_tickers(cfg, text)
     try:
@@ -98,6 +98,10 @@ def render_episode_md(r: dict) -> str:
     if direct:
         L += ["", "_Citati per nome nella trascrizione: " + "; ".join(
             f"{names.get(k['ticker'], k['ticker'])} a {', '.join(k['timestamp'])}" for k in direct) + "_"]
+    if s.get("nomi_corretti"):
+        L += ["", "_Nomi corretti rispetto ai sottotitoli: " + "; ".join(
+            f"«{n.get('trascritto', '')}» → **{n.get('corretto', '')}** ({n.get('perche', '')})"
+            for n in s["nomi_corretti"]) + "_"]
     if s.get("non_chiaro"):
         L += ["", "**Non chiaro / limiti:** " + "; ".join(s["non_chiaro"])]
     if s:
