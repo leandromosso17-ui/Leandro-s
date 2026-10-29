@@ -28,10 +28,13 @@ class LLMResult:
     tokens_out: int
     model: str
     cost_usd: float = 0.0
+    meta: dict | None = None   # risposta completa del motore, per diagnosi
 
 
 class LLMError(RuntimeError):
-    pass
+    def __init__(self, msg: str, res: "LLMResult | None" = None):
+        super().__init__(msg)
+        self.res = res   # token spesi anche se la chiamata è fallita
 
 
 def find_claude() -> str | None:
@@ -50,10 +53,12 @@ def _claude(prompt: str, model: str, max_out: int) -> LLMResult:
     exe = find_claude()
     if not exe:
         raise LLMError("comando `claude` non trovato nel PATH né in ~/.local/bin")
-    cmd = [exe, "-p", "--model", model, "--output-format", "json",
+    # --effort low: il thinking (~3k token misurati) consuma il tetto di output
+    # e per una sintesi non serve. MAX_THINKING_TOKENS=0 da solo non lo spegne.
+    cmd = [exe, "-p", "--model", model, "--output-format", "json", "--effort", "low",
            "--tools", "", "--system-prompt", SYSTEM, "--strict-mcp-config",
            "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence"]
-    env = dict(os.environ, CLAUDE_CODE_MAX_OUTPUT_TOKENS=str(max_out))
+    env = dict(os.environ, CLAUDE_CODE_MAX_OUTPUT_TOKENS=str(max_out), MAX_THINKING_TOKENS="0")
     # Il prompt passa da stdin: niente limiti di lunghezza della riga di comando su Windows.
     p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding="utf-8",
                        env=env, timeout=600)
@@ -61,12 +66,14 @@ def _claude(prompt: str, model: str, max_out: int) -> LLMResult:
         d = json.loads(p.stdout)
     except json.JSONDecodeError as e:
         raise LLMError(f"output non JSON da claude -p: {(p.stderr or p.stdout)[:300]}") from e
-    if d.get("is_error"):
-        raise LLMError(str(d.get("result"))[:300])
     u = d.get("usage", {})
     tin = u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0)
     used_model = next(iter(d.get("modelUsage", {})), model)
-    return LLMResult(d.get("result", ""), tin, u.get("output_tokens", 0), used_model, d.get("total_cost_usd", 0.0))
+    meta = {k: v for k, v in d.items() if k != "result"}
+    res = LLMResult(d.get("result", ""), tin, u.get("output_tokens", 0), used_model, d.get("total_cost_usd", 0.0), meta)
+    if d.get("is_error"):
+        raise LLMError(str(d.get("result"))[:300], res)
+    return res
 
 
 def _ollama(prompt: str, url: str, model: str, max_out: int) -> LLMResult:
@@ -85,8 +92,19 @@ def call(cfg, prompt: str, *, purpose: str, cheap: bool, max_out: int) -> LLMRes
         res = _ollama(prompt, llm.get("ollama_url", "http://localhost:11434"), llm["ollama_model"], max_out)
     else:
         model = llm.get("claude_model_cheap" if cheap else "claude_model_final", "haiku")
-        res = _claude(prompt, model, max_out)
+        try:
+            res = _claude(prompt, model, max_out)
+        except LLMError as e:
+            if e.res:
+                log_tokens(cfg.logs_dir / "tokens.csv", f"{purpose}-errore", e.res)
+            raise
     log_tokens(cfg.logs_dir / "tokens.csv", purpose, res)
+    turns = (res.meta or {}).get("num_turns", 1)
+    if turns > 1:
+        # Tetto di output superato: claude -p continua da solo e `result` contiene
+        # solo l'ultimo pezzo, cioè JSON spezzato. Meglio un errore chiaro.
+        raise LLMError(f"risposta spezzata in {turns} turni (tetto di {max_out} token di output superato): "
+                       f"alza llm.max_output_tokens_* in config.yaml")
     return res
 
 

@@ -135,9 +135,12 @@ def youtube_subs(cfg, ep: Episode) -> dict:
             return unavailable("video della puntata non trovato su YouTube")
         url, _ = found
         with tempfile.TemporaryDirectory() as tmp:
-            opts = {"quiet": True, "no_warnings": True, "skip_download": True,
+            # "it" basta: "it-orig" è lo stesso file e raddoppia i download.
+            # Retry e timeout larghi: sull'hotspot YouTube va spesso in timeout.
+            opts = {"quiet": True, "no_warnings": True, "noprogress": True, "skip_download": True,
                     "writesubtitles": True, "writeautomaticsub": True,
-                    "subtitleslangs": ["it", "it-orig"], "subtitlesformat": "vtt",
+                    "subtitleslangs": ["it"], "subtitlesformat": "vtt",
+                    "socket_timeout": 45, "retries": 5, "extractor_retries": 3,
                     "outtmpl": str(Path(tmp) / "sub.%(ext)s")}
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([url])

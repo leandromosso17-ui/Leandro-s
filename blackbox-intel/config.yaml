@@ -26,7 +26,8 @@ llm:
   claude_model_final: haiku
   ollama_url: http://localhost:11434
   ollama_model: qwen2.5:7b
-  max_output_tokens_podcast: 1500
+  # La sera (12 segnali con citazioni) supera 1500: oltre il tetto claude -p spezza il JSON.
+  max_output_tokens_podcast: 4000
   max_output_tokens_final: 2500
 
 # Collegamenti podcast -> titoli, calcolati in Python (zero token).

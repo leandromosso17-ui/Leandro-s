@@ -2,6 +2,7 @@
 collegamenti ai titoli del CSV (Python, zero token)."""
 from __future__ import annotations
 
+import json
 import re
 
 from intel import llm
@@ -50,8 +51,13 @@ def summarize(cfg, state, ep, transcript: str, method: str) -> dict:
     res = llm.call(cfg, prompt, purpose=f"podcast-{ep.slot}", cheap=True, max_out=max_out)
     try:
         summary = llm.parse_json(res.text)
-    except (ValueError, llm.LLMError):
-        summary = {"sintesi": [], "non_chiaro": ["risposta del modello non in JSON: sintesi non disponibile"]}
+    except (ValueError, llm.LLMError) as e:
+        # la risposta grezza resta su disco: senza non si capisce perché il JSON è rotto
+        dump = cfg.data_dir / f"llm-fail-{ep.published:%Y%m%d-%H%M}-{ep.slot}.json"
+        dump.write_text(json.dumps({"error": str(e), "text": res.text, "meta": res.meta},
+                                   ensure_ascii=False, indent=1), encoding="utf-8")
+        summary = {"sintesi": [], "non_chiaro": [f"risposta del modello non in JSON ({e}): sintesi non disponibile, "
+                                                 f"risposta grezza in {dump.name}"]}
     if truncated:
         summary.setdefault("non_chiaro", []).append(
             f"trascrizione tagliata a {max_chars} caratteri su {len(transcript)}")
