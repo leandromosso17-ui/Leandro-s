@@ -34,10 +34,22 @@ class LLMError(RuntimeError):
     pass
 
 
-def _claude(prompt: str, model: str, max_out: int) -> LLMResult:
+def find_claude() -> str | None:
+    # L'installer nativo mette claude in ~/.local/bin ma non sempre lo aggiunge al PATH.
     exe = shutil.which("claude")
+    if exe:
+        return exe
+    for name in ("claude.exe", "claude"):
+        p = Path.home() / ".local" / "bin" / name
+        if p.is_file():
+            return str(p)
+    return None
+
+
+def _claude(prompt: str, model: str, max_out: int) -> LLMResult:
+    exe = find_claude()
     if not exe:
-        raise LLMError("comando `claude` non trovato nel PATH")
+        raise LLMError("comando `claude` non trovato nel PATH né in ~/.local/bin")
     cmd = [exe, "-p", "--model", model, "--output-format", "json",
            "--tools", "", "--system-prompt", SYSTEM, "--strict-mcp-config",
            "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence"]

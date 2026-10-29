@@ -10,7 +10,8 @@ podcast:
   # Lascia vuoto: viene scoperto da itunes lookup e salvato in SQLite.
   feed_url: ""
   # Canale YouTube; se vuoto si cerca la puntata per titolo con yt-dlp.
-  youtube_channel_url: ""
+  # Chora Media pubblica qui le puntate; la ricerca libera non le trova (titoli diversi dal feed).
+  youtube_channel_url: "https://www.youtube.com/@ChoraMedia"
   morning_suffix: "| Morning Finance"
   # Attesa della puntata dentro lo stesso run.
   retry_minutes: 15

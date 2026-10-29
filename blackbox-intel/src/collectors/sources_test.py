@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import time
 from datetime import date, timedelta
 
@@ -100,8 +99,9 @@ def t_whisper(cfg, state):
 
 
 def t_claude(cfg, state):
-    exe = shutil.which("claude")
-    return bool(exe), exe or "comando `claude` non nel PATH"
+    from intel.llm import find_claude
+    exe = find_claude()
+    return bool(exe), exe or "comando `claude` non nel PATH né in ~/.local/bin"
 
 
 def t_ollama(cfg, state):
@@ -175,7 +175,14 @@ def t_putcall(cfg, state):
     while d.weekday() >= 5:
         d -= timedelta(days=1)
     return _json_ok(f"https://cdn.cboe.com/data/us/options/market_statistics/daily/{d.isoformat()}_daily_options",
-                    lambda j: (True, f"statistiche CBOE del {d:%d/%m}"))
+                    lambda j: _putcall_ratio(j, d))
+
+
+def _putcall_ratio(j, d):
+    r = {x.get("name"): x.get("value") for x in j.get("ratios") or []}
+    if "TOTAL PUT/CALL RATIO" not in r:
+        return False, "JSON senza TOTAL PUT/CALL RATIO (formato cambiato)"
+    return True, f"put/call totale {r['TOTAL PUT/CALL RATIO']}, equity {r.get('EQUITY PUT/CALL RATIO', '?')} del {d:%d/%m}"
 
 
 def t_polymarket(cfg, state):
@@ -204,9 +211,12 @@ def t_xoomar_si(cfg, state):
 
 
 def t_xoomar_13f(cfg, state):
+    # xoomar non ha i holder 13F per titolo (solo per gestore, /funds/{slug}):
+    # per titolo ci sono i 13D/13G sopra il 5%.
     time.sleep(6)
-    return _json_ok(f"{XOOMAR}/fund-holders/uber",
-                    lambda d: (True, "holder 13F UBER"), headers={"Accept": "application/json"})
+    return _json_ok(f"{XOOMAR}/large-holders?symbol=UBER&form=13G&days=365",
+                    lambda d: (bool(d.get("data")), f"{len(d.get('data') or [])} filing 13G UBER in 365 giorni"),
+                    headers={"Accept": "application/json"})
 
 
 def t_xoomar_earnings(cfg, state):
@@ -217,8 +227,10 @@ def t_xoomar_earnings(cfg, state):
 
 def t_xoomar_cot(cfg, state):
     time.sleep(6)
-    return _json_ok(f"{XOOMAR}/cot/copper",
-                    lambda d: (True, "COT rame"), headers={"Accept": "application/json"})
+    # slug dall'elenco /api/markets/cot
+    return _json_ok(f"{XOOMAR}/cot/copper-grade-1",
+                    lambda d: (bool(d.get("data")), f"COT rame, ultimo report {(d.get('data') or [{}])[0].get('reportDate', '?')}"),
+                    headers={"Accept": "application/json"})
 
 
 def t_cftc(cfg, state):
@@ -228,16 +240,17 @@ def t_cftc(cfg, state):
 
 
 def t_consob(cfg, state):
-    return _http_ok("https://www.consob.it/web/area-pubblica/pnc")
+    return _http_ok("https://www.consob.it/web/area-pubblica/pnc", expect="Posizioni nette corte")
 
 
 def t_bafin(cfg, state):
-    return _http_ok("https://www.bundesanzeiger.de/pub/de/nlp")
+    return _http_ok("https://www.bundesanzeiger.de/pub/de/nlp", expect="Netto-Leerverkaufspositionen")
 
 
 def t_afm(cfg, state):
     # Solo raggiungibilità della pagina registro: il formato di download va verificato a mano.
-    return _http_ok("https://www.afm.nl/en/sector/registers/meldingenregisters/netto-shortposities-actueel")
+    return _http_ok("https://www.afm.nl/en/sector/registers/meldingenregisters/netto-shortposities-actueel",
+                    expect="Net short positions")
 
 
 def t_notion(cfg, state):
@@ -271,7 +284,7 @@ CHECKS = [
     ("SEC EDGAR", "posizionamento", t_sec),
     ("xoomar Form 4", "posizionamento", t_xoomar_insiders),
     ("xoomar short interest", "posizionamento", t_xoomar_si),
-    ("xoomar 13F", "posizionamento", t_xoomar_13f),
+    ("xoomar 13D/13G", "posizionamento", t_xoomar_13f),
     ("xoomar utili", "utili", t_xoomar_earnings),
     ("xoomar COT rame", "posizionamento", t_xoomar_cot),
     ("CFTC COT diretto", "posizionamento", t_cftc),
