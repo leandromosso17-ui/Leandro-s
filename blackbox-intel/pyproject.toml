@@ -10,11 +10,15 @@ dependencies = [
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
     "yt-dlp>=2026.10.26",
+    # Windows non ha il database dei fusi orari: senza, ZoneInfo("Europe/Rome") fallisce.
+    "tzdata>=2026.1",
 ]
 
 [project.optional-dependencies]
 # Solo se mancano sia i sottotitoli YouTube sia la trascrizione nel feed.
 whisper = ["faster-whisper>=1.2.1"]
+# Sentiment delle news in locale senza torch: FinBERT e multilingue in ONNX (~300 MB con i modelli).
+sentiment = ["onnxruntime>=1.31.1", "tokenizers>=0.23.3", "numpy>=2.0"]
 
 [project.scripts]
 intel = "intel.cli:main"

@@ -42,6 +42,29 @@ llm:
   max_output_tokens_podcast: 16000
   max_output_tokens_final: 2500
 
+news:
+  days: 7   # finestra di Google News per ticker
+
+# "Top 3 banche" per titolo: prima queste, nell'ordine; se sono meno di 3 si completa
+# con le case più recenti. alias = come compaiono su Yahoo e nei titoli di news.
+banche:
+  - {nome: Goldman Sachs, alias: [goldman]}
+  - {nome: Morgan Stanley, alias: []}
+  - {nome: JPMorgan, alias: [jp morgan, j.p. morgan]}
+  - {nome: Bank of America, alias: [b of a securities, bofa, bank of america securities]}
+  - {nome: UBS, alias: []}
+  - {nome: Barclays, alias: []}
+  - {nome: Citi, alias: [citigroup]}
+  - {nome: Deutsche Bank, alias: []}
+  - {nome: BNP Paribas, alias: [bnp paribas exane, exane]}
+  - {nome: HSBC, alias: []}
+  - {nome: Jefferies, alias: []}
+  - {nome: Bernstein, alias: []}
+  - {nome: Wells Fargo, alias: []}
+  - {nome: Mediobanca, alias: []}
+  - {nome: Intesa Sanpaolo, alias: [intesa]}
+  - {nome: Equita, alias: []}
+
 # Collegamenti podcast -> titoli, calcolati in Python (zero token).
 # alias = citazione diretta; temi = toccato da un settore/tema.
 themes:
@@ -57,8 +80,11 @@ themes:
 tickers:
   UBER:    {alias: [uber], temi: [mobilita, software_ai]}
   NOW:     {alias: [servicenow, service now], temi: [software_ai]}
-  COPA.L:  {alias: [], temi: [rame]}
-  4BRZ.DE: {alias: [], temi: [brasile]}
+  # ETF/ETC: prezzi del sottostante e news sul sottostante (nessuna copertura analisti)
+  COPA.L:  {alias: [], temi: [rame], sottostanti: [HG=F],
+            news_query: {en: [copper price], it: [prezzo rame]}}
+  4BRZ.DE: {alias: [], temi: [brasile], sottostanti: ["^BVSP", "BRL=X"],
+            news_query: {en: [Brazil stocks Bovespa, Brazilian real], it: [Borsa Brasile, real brasiliano]}}
   DNR.MI:  {alias: [de nora], temi: [cavi_energia]}
   NET:     {alias: [cloudflare], temi: [software_ai]}
   CLS:     {alias: [celestica], temi: [semiconduttori, software_ai]}

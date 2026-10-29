@@ -8,7 +8,8 @@ import requests
 DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) blackbox-intel/0.1"
 
 
-def get(url: str, *, params=None, headers=None, timeout=20, retries=3, min_interval=0.0) -> requests.Response:
+def get(url: str, *, params=None, headers=None, timeout=20, retries=3, min_interval=0.0,
+        session: requests.Session | None = None) -> requests.Response:
     h = {"User-Agent": DEFAULT_UA}
     if headers:
         h.update(headers)
@@ -17,7 +18,7 @@ def get(url: str, *, params=None, headers=None, timeout=20, retries=3, min_inter
         if min_interval:
             time.sleep(min_interval)
         try:
-            r = requests.get(url, params=params, headers=h, timeout=timeout)
+            r = (session or requests).get(url, params=params, headers=h, timeout=timeout)
         except (requests.ConnectionError, requests.Timeout):
             # DNS/hotspot instabili: riprova prima di dichiarare morta la fonte.
             if attempt >= retries:

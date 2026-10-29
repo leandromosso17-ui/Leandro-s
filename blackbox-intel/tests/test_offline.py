@@ -53,5 +53,48 @@ def test_fix_names():
         "[00:10] l'AI trade riparte, lo dice Chora Media; highlights"
 
 
+BANKS = [{"nome": "Goldman Sachs", "alias": ["goldman"]}, {"nome": "Citi", "alias": ["citigroup"]},
+         {"nome": "Bank of America", "alias": ["b of a securities"]}]
+
+
+def test_bank_headline():
+    from datetime import datetime, timezone
+    from analysis.banks import from_headline
+    it = {"title": "Prysmian, Citigroup alza il target price da 120 a 136 euro, Buy", "source": "X",
+          "link": "u", "published": datetime(2026, 10, 26, tzinfo=timezone.utc)}
+    names = ["Prysmian"]
+    a = from_headline(it, BANKS, names)
+    assert (a["firm"], a["rating"], a["pt"]) == ("Citi", "Buy", 136.0)
+    assert from_headline({**it, "title": "Prysmian sale in Borsa"}, BANKS, names) is None
+    # casi reali visti in Google News
+    def pt(title, n):
+        r = from_headline({**it, "title": title}, BANKS, [n])
+        return r and (r["firm"], r["pt"])
+    assert pt("Besi stock: Goldman cuts target for Besi stock from EUR 342.00 to EUR 275.00", "Besi") == ("Goldman Sachs", 275.0)
+    assert pt("Bank Of America Raises ServiceNow Price Target Ahead Of Q3 Earnings", "ServiceNow") is None
+    assert pt("Synopsys targets well ahead, B of A Securities Says - Firm Lifts Target By $100", "Synopsys") is None
+    assert pt("Adobe Falls 4% as Citi Cuts to Underweight With $225 Target; ServiceNow Climbs 3%", "ServiceNow") is None
+    assert pt("Citigroup Adjusts Price Target on ServiceNow to $157 From $170", "ServiceNow") == ("Citi", 157.0)
+    assert pt("Saipem, Citi incrementa target price e conferma Buy", "Prysmian") is None
+
+
+def test_top_banks_priority_and_timeline():
+    from datetime import date
+    from analysis.banks import top_banks
+    rows = [
+        {"date": date(2026, 1, 5), "firm": "Needham", "rating": "Buy", "pt": 90},
+        {"date": date(2026, 2, 1), "firm": "B of A Securities", "rating": "Neutral", "pt": 80},
+        {"date": date(2026, 6, 1), "firm": "B of A Securities", "rating": "Buy", "pt": None},
+        {"date": date(2026, 6, 1), "firm": "B of A Securities", "rating": "", "pt": 95},
+        {"date": date(2026, 9, 1), "firm": "B of A Securities", "rating": "Buy", "pt": 95},
+        {"date": date(2026, 3, 1), "firm": "Goldman Sachs", "rating": "Buy", "pt": 100},
+    ]
+    top = top_banks(rows, BANKS)
+    assert [t["bank"] for t in top] == ["Goldman Sachs", "Bank of America", "Needham"]
+    bofa = top[1]
+    assert [(x["rating"], x["pt"]) for x in bofa["timeline"]] == [("Neutral", 80), ("Buy", 95)]
+    assert bofa["direction"] == "più rialzista" and bofa["current"]["date"] == date(2026, 9, 1)
+
+
 def test_parse_json_fenced():
     assert parse_json('```json\n{"sintesi": ["a"]}\n```') == {"sintesi": ["a"]}
