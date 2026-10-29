@@ -25,9 +25,9 @@ foreach ($slot in @(@{Name = "blackbox-intel mattina"; Slot = "mattina"; At = "0
     $action = New-ScheduledTaskAction -Execute "cmd.exe" `
         -Argument "/c `"`"$uv`" run intel run --slot $($slot.Slot) > `"$log`" 2>&1`"" -WorkingDirectory $dir
     $trigger = New-ScheduledTaskTrigger -Daily -At $slot.At
-    # Riattiva il computer · Esegui il prima possibile dopo un avvio saltato · massimo 4 ore
-    # (il run aspetta la puntata fino a 2 ore) · niente seconda istanza in parallelo
-    $settings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
+    # Niente risveglio del PC: se è spento all'ora prevista, il run parte appena lo accendi
+    # (StartWhenAvailable). Massimo 4 ore (il run aspetta la puntata fino a 2 ore), una istanza alla volta.
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
         -ExecutionTimeLimit (New-TimeSpan -Hours 4) -MultipleInstances IgnoreNew `
         -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     # gira col tuo utente, solo se hai fatto l'accesso: claude -p usa il tuo login

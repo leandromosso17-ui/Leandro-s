@@ -70,7 +70,7 @@ Il thinking di Haiku non si spegne da `claude -p` e conta nel tetto di output: p
 
 ## Scheduling
 
-`setup_tasks.ps1` crea «blackbox-intel mattina» (08:00) e «blackbox-intel sera» (21:00) nell'ora del PC, con «Riattiva il computer» ed «Esegui il prima possibile dopo un avvio pianificato saltato». Log in `logs\run-mattina.log` / `logs\run-sera.log`. Perché il PC si risvegli davvero, nelle Opzioni risparmio energia devono essere attivi i «timer di riattivazione». Per toglierle: `setup_tasks.ps1 -Remove`.
+`setup_tasks.ps1` crea «blackbox-intel mattina» (08:00) e «blackbox-intel sera» (21:00) nell'ora del PC, con «Esegui il prima possibile dopo un avvio pianificato saltato» e senza risvegliare il computer: se il PC è spento all'ora prevista, il run parte appena lo accendi. Log in `logs\run-mattina.log` / `logs\run-sera.log`. Per toglierle: `setup_tasks.ps1 -Remove`.
 
 Mai più di 2 run completi al giorno (lock file + stato in SQLite). Report HTML in `%USERPROFILE%\blackbox-intel\reports\AAAA-MM-GG-slot.html`.
 
