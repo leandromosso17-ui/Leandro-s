@@ -5,7 +5,7 @@ quoteSummary vuole cookie + crumb: si prendono una volta per processo.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
@@ -28,11 +28,19 @@ def _pct(a: float, b: float) -> float | None:
     return (a / b - 1) * 100 if a and b else None
 
 
+def _back(rows: list[tuple[int, float]], tz, last_ts: int, days: int) -> float | None:
+    """Chiusura dell'ultima seduta a `days` giorni di calendario o più prima dell'ultima."""
+    target = datetime.fromtimestamp(last_ts, tz).date() - timedelta(days=days)
+    past = [c for ts, c in rows if datetime.fromtimestamp(ts, tz).date() <= target]
+    return past[-1] if past else None
+
+
 def prices(ticker: str) -> dict:
-    """Ultima chiusura, variazione 1 e 5 sedute, valuta e tipo di strumento."""
+    """Ultima chiusura, variazioni a 1 e 5 sedute e a 1, 6 e 12 mesi, valuta e tipo di strumento."""
     url = CHART.format(t=ticker)
     try:
-        r = http.get(url, params={"range": "1mo", "interval": "1d"}, min_interval=RATE)
+        # 2 anni: con 1 anno esatto a volte manca la seduta di 12 mesi fa
+        r = http.get(url, params={"range": "2y", "interval": "1d"}, min_interval=RATE)
         res = (r.json().get("chart", {}).get("result") or [None])[0]
     except Exception as e:  # noqa: BLE001
         return unavailable(f"Yahoo chart: {e}", url)
@@ -55,6 +63,9 @@ def prices(ticker: str) -> dict:
         "date": datetime.fromtimestamp(last_ts, tz).date(),
         "chg_1d": _pct(last, rows[-2][1]),
         "chg_5d": _pct(last, rows[-6][1]) if len(rows) >= 6 else None,
+        "chg_1m": _pct(last, _back(rows, tz, last_ts, 30)),
+        "chg_6m": _pct(last, _back(rows, tz, last_ts, 182)),
+        "chg_1y": _pct(last, _back(rows, tz, last_ts, 365)),
         "currency": meta.get("currency", ""),
         "name": meta.get("longName") or meta.get("shortName") or ticker,
         "instrument": meta.get("instrumentType", ""),

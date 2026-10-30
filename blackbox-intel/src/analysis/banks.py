@@ -57,7 +57,10 @@ def _timeline(rows: list[dict]) -> list[dict]:
         if out:
             r["rating"] = r["rating"] or out[-1]["rating"]
             r["pt"] = r["pt"] or out[-1]["pt"]
-            if out[-1]["rating"] == r["rating"] and out[-1]["pt"] == r["pt"]:
+            # Hold/Neutral, Buy/Overweight...: stesso giudizio scritto diverso da Yahoo e dalle news
+            s0, s1 = grade_score(out[-1]["rating"]), grade_score(r["rating"])
+            same_rating = out[-1]["rating"] == r["rating"] or (s0 is not None and s0 == s1)
+            if same_rating and out[-1]["pt"] == r["pt"]:
                 continue
         out.append(r)
     return out

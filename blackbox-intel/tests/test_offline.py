@@ -160,8 +160,10 @@ def test_digest_render():
     cfg = SimpleNamespace(positions=pos, raw={"banche": [{"nome": "Evercore ISI", "breve": "Evercore"}]})
     news = {"NOW": {"price": {"status": "ok", "data": {"last": 110.0, "currency": "USD", "chg_1d": -26.7, "chg_5d": -30.0}},
                     "news": {"status": "ok", "data": [{"sentiment": "negative"}]},
-                    "banks": {"status": "ok", "top": [{"bank": "Evercore ISI", "direction": "più ribassista",
-                                                       "current": {"rating": "Outperform", "pt": 175.0, "date": date(2026, 10, 29)}}]}}}
+                    "banks": {"status": "ok", "top": [{"bank": "Evercore ISI", "direction": "più rialzista",
+                                                       "current": {"rating": "Outperform", "pt": 175.0, "date": date(2026, 10, 29)},
+                                                       "timeline": [{"rating": "Outperform", "pt": 160.0, "date": date(2026, 7, 1)},
+                                                                    {"rating": "Outperform", "pt": 175.0, "date": date(2026, 10, 29)}]}]}}}
     ep = {"slot": "sera", "title": "La macchina perfetta perde colpi", "link": "",
           "summary": {"tesi_centrale": "Tesi.", "sintesi": ["a"], "opportunita": [{"idea": "Pharma AI", "cosa_dicono": "x"}],
                       "tuoi_asset": [{"ticker": "NOW", "concetti": ["cala"]}],
@@ -173,7 +175,8 @@ def test_digest_render():
     h = render_html(cfg, ctx)
     assert "MARKET INTEL" in h and "Evercore" in h and "175$" in h and "Pharma AI" in h and 'class="chip conf">NOW' in h
     m = render_md(cfg, ctx)
-    assert m.startswith("# Market Intel — 30.10.2026") and "Evercore OP 175$ ▼" in m
+    assert m.startswith("# Market Intel — 30.10.2026")
+    assert "Evercore OP 175$ (29.10.26) ← 160$ (01.07.26) +9.4%" in m
 
 
 def test_parse_json_fenced():

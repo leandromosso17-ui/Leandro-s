@@ -57,13 +57,34 @@ def banks(n: dict, short: dict, cur: str) -> list[dict]:
     if b.get("status") != "ok":
         return []
     out = []
+    rs = lambda r: RATING_SHORT.get((r or "").strip().lower(), (r or "").strip())
     for t in b.get("top") or []:
-        cu = t["current"]
-        r = (cu.get("rating") or "").strip()
-        out.append({"bank": short.get(t["bank"], t["bank"]), "rating": RATING_SHORT.get(r.lower(), r),
-                    "pt": f"{cu['pt']:,.0f}{cur}" if cu.get("pt") else "", "dir": DIR.get(t["direction"], ""),
-                    "date": cu["date"], "link": cu.get("link")})
+        from analysis.banks import grade_score
+        tl = t.get("timeline") or [t["current"]]
+        now, prev = tl[-1], (tl[-2] if len(tl) > 1 else None)
+        if prev and prev.get("pt") == now.get("pt") and grade_score(prev.get("rating")) == grade_score(now.get("rating")):
+            prev = None  # stesso giudizio scritto diverso (Hold/Neutral): non è un cambio
+        item = {"bank": short.get(t["bank"], t["bank"]), "rating": rs(now.get("rating")),
+                "pt": f"{now['pt']:,.0f}{cur}" if now.get("pt") else "", "dir": DIR.get(t["direction"], ""),
+                # data in cui la banca ha fissato questo target/rating (non l'ultima conferma)
+                "date": now["date"], "link": t["current"].get("link"), "prev": None}
+        if prev:
+            chg = (now["pt"] / prev["pt"] - 1) * 100 if now.get("pt") and prev.get("pt") else None
+            item["prev"] = {"pt": f"{prev['pt']:,.0f}{cur}" if prev.get("pt") else "", "date": prev["date"],
+                            "rating": rs(prev.get("rating")) if rs(prev.get("rating")) != item["rating"] else "",
+                            "chg": chg}
+        out.append(item)
     return out
+
+
+def bank_text(b: dict) -> str:
+    """«JPM OW 160$ (29.10) ← 150$ (23.07) +6.7%»"""
+    s = f"{b['bank']} {b['rating']} {b['pt']}".replace("  ", " ").strip() + f" ({b['date']:%d.%m.%y})"
+    p = b.get("prev")
+    if p:
+        old = " ".join(x for x in (p["rating"], p["pt"]) if x) or "–"
+        s += f" ← {old} ({p['date']:%d.%m.%y})" + (f" {p['chg']:+.1f}%" if p["chg"] is not None else "")
+    return s
 
 
 def earnings_cell(e: dict) -> tuple[str, str]:
@@ -166,6 +187,7 @@ ul{margin:6px 0;padding-left:18px}li{margin:3px 0}li::marker{color:var(--dim)}
 .opp b{color:#fff}.note{color:var(--dim);font-size:12px;margin-top:8px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:760px){.two{grid-template-columns:1fr}}
 .two section{margin:0}.tag{font:11px Consolas,monospace;color:var(--dim);margin-left:6px}
+.assets{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px 20px}
 .lvl{font:600 12px Consolas,monospace;padding:1px 6px;border:1px solid}
 .lvl.alto{color:var(--down)}.lvl.medio{color:var(--amber)}.lvl.basso,.lvl.nessuno{color:var(--up)}
 .trend{font:12px Consolas,monospace;color:var(--dim);margin:6px 0 10px}
@@ -176,7 +198,7 @@ td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;white-
 tr:last-child td{border-bottom:0}td.n{text-align:right}td.bk{white-space:normal;min-width:260px}
 .t{color:#fff;font-weight:600}.sub{display:block;color:var(--dim);font-size:11px;font-family:"Segoe UI",sans-serif}
 .up{color:var(--up)}.down{color:var(--down)}.flat{color:var(--dim)}
-.b{display:inline-block;margin:0 10px 2px 0}.b i{font-style:normal;color:var(--dim)}
+.b{margin:0 0 3px;white-space:nowrap}.b i{font-style:normal;color:var(--dim)}.b .pt{color:#fff;font-weight:600}.dt{color:var(--dim);font-size:11px}
 .conf{color:var(--conf)}.est{color:var(--est)}.past{color:#5a5a5a}
 aside{min-width:0}@media(max-width:980px){aside{max-width:420px}}
 .cal{width:100%;table-layout:fixed;font-size:12px;margin-bottom:14px}.cal th{text-align:center;padding:3px 0;text-transform:none;letter-spacing:0}
@@ -218,19 +240,18 @@ def h_episode(ep: dict) -> str:
 
 def h_assets(eps: list[dict], names: dict) -> str:
     items = assets_mentions(eps)
+    # in orizzontale: un riquadro per titolo citato, affiancati
     body = "".join(
-        f'<p style="margin:10px 0 2px"><span class="t">{esc(names.get(t, t))}</span><span class="tag">{esc(t)} · '
+        f'<div class="asset"><p style="margin:0 0 2px"><span class="t">{esc(names.get(t, t))}</span><span class="tag">{esc(t)} · '
         f'{" + ".join(SLOT.get(sl, sl).lower() for sl, _ in hits)}</span></p>'
-        f'<ul>{"".join(f"<li>{esc(c)}</li>" for _, cs in hits for c in cs)}</ul>' for t, hits in items)
+        f'<ul>{"".join(f"<li>{esc(c)}</li>" for _, cs in hits for c in cs)}</ul></div>' for t, hits in items)
     return ('<section><p class="k">I tuoi asset nel podcast</p>'
-            + (body or '<p class="note">Nessuno dei tuoi titoli citato nelle puntate mostrate.</p>') + "</section>")
+            + (f'<div class="assets">{body}</div>' if body else
+               '<p class="note">Nessuno dei tuoi titoli citato nelle puntate mostrate.</p>') + "</section>")
 
 
-def h_bubble(eps: list[dict], state) -> str:
-    tr = bubble_trend(state)
+def h_bubble(eps: list[dict]) -> str:
     out = ['<section><p class="k">Bolla AI · cosa dicono gli host</p>']
-    if tr:
-        out.append('<div class="trend">' + " → ".join(f'{esc(d)} <span class="lvl {esc(l)}">{esc(l)}</span>' for d, l in tr) + "</div>")
     for ep in eps:
         b = bubble(ep)
         if not b:
@@ -250,23 +271,30 @@ def h_table(cfg, tipo: str, ctx: dict, short: dict) -> str:
         if p.tipo != tipo:
             continue
         n = ctx["news"].get(p.ticker) or {}
-        d = price(n)
-        cur = CUR.get((d or {}).get("currency", ""), "")
-        nc = news_counts(n)
-        news = (f'<span class="up">▲{nc[0]}</span> <span class="down">▼{nc[1]}</span> <span class="flat">/{nc[2]}</span>'
-                if nc else '<span class="flat">n.d.</span>')
+        d = price(n) or {}
+        cur = CUR.get(d.get("currency", ""), "")
         e_txt, e_cls = earnings_cell(ctx["earnings"].get(p.ticker))
-        bks = banks(n, short, cur)
-        bank_html = "".join(
-            f'<span class="b">{esc(b["bank"])} <i>{esc(b["rating"])}</i>'
-            + (f' {esc(b["pt"])}' if b["pt"] else "") + f' <span class="{"up" if b["dir"] == "▲" else "down" if b["dir"] == "▼" else "flat"}">{b["dir"]}</span></span>'
-            for b in bks) or '<span class="flat">–</span>'
+        lines = []
+        for b in banks(n, short, cur):
+            cls = "up" if b["dir"] == "▲" else "down" if b["dir"] == "▼" else "flat"
+            head = (f'<span class="t">{esc(b["bank"])}</span> <i>{esc(b["rating"])}</i>'
+                    + (f' <b class="pt">{esc(b["pt"])}</b>' if b["pt"] else "") + f' <span class="dt">{b["date"]:%d.%m.%y}</span>')
+            p_ = b.get("prev")
+            tail = ""
+            if p_:
+                old = " ".join(x for x in (p_["rating"], p_["pt"]) if x) or "–"
+                tail = (f' <span class="dt">← {esc(old)} {p_["date"]:%d.%m.%y}</span>'
+                        + (f' <span class="{cls}">{p_["chg"]:+.1f}%</span>' if p_["chg"] is not None else f' <span class="{cls}">{b["dir"]}</span>'))
+            lines.append(f'<div class="b">{head}{tail}</div>')
+        bank_html = "".join(lines) or '<span class="flat">–</span>'
+        chgs = "".join(_chg_td(d.get(k)) for k in ("chg_1d", "chg_5d", "chg_1m", "chg_6m", "chg_1y"))
         rows.append(f'<tr><td><span class="t">{esc(p.ticker)}</span><span class="sub">{esc(p.nome)}</span></td>'
-                    f'<td class="n">{esc(fmt_px(d)) if d else "n.d."}</td>{_chg_td((d or {}).get("chg_1d"))}{_chg_td((d or {}).get("chg_5d"))}'
-                    f'<td>{news}</td><td class="{e_cls}">{esc(e_txt)}</td><td class="bk">{bank_html}</td></tr>')
+                    f'<td class="n">{esc(fmt_px(d)) if d else "n.d."}</td>{chgs}'
+                    f'<td class="{e_cls}">{esc(e_txt)}</td><td class="bk">{bank_html}</td></tr>')
     label = "Portfolio" if tipo == "portfolio" else "Watchlist"
     return (f'<section><p class="k">{label}</p><div class="tw"><table><thead><tr><th>Titolo</th><th>Prezzo</th><th>1g</th>'
-            f'<th>5g</th><th>News 7g</th><th>Utili</th><th>Banche · rating · target · trend</th></tr></thead><tbody>'
+            f'<th>5g</th><th>1m</th><th>6m</th><th>1a</th><th>Utili</th>'
+            f'<th>Banche · rating · target (data) ← precedente</th></tr></thead><tbody>'
             + "".join(rows) + "</tbody></table></div></section>")
 
 
@@ -337,7 +365,7 @@ def render_html(cfg, ctx: dict) -> str:
     main = "".join(h_episode(e) for e in eps)
     if ctx.get("podcast_note"):
         main += f'<p class="note">{esc(ctx["podcast_note"])}</p>'
-    main += f'<div class="two" style="margin-bottom:16px">{h_assets(eps, names)}{h_bubble(eps, ctx["state"])}</div>'
+    main += h_assets(eps, names) + h_bubble(eps)
     main += h_table(cfg, "portfolio", ctx, short) + h_table(cfg, "watchlist", ctx, short) + h_poly(ctx)
     unav = f["unavailable"]
     main += (f'<footer>{f["calls"]} chiamate LLM · {f["tin"]:,} in / {f["tout"]:,} out · settimana {f["week"]["tokens_in"]:,} in / '
@@ -378,26 +406,22 @@ def render_md(cfg, ctx: dict) -> str:
     if not items:
         L.append("_Nessuno dei tuoi titoli citato nelle puntate mostrate._")
     L += ["", "## Bolla AI"]
-    tr = bubble_trend(ctx["state"])
-    if tr:
-        L.append("_" + " → ".join(f"{d} {l}" for d, l in tr) + "_")
     for ep in ctx["episodes"]:
         b = bubble(ep)
         if b:
             L.append(f"- **{SLOT.get(ep['slot'], '')} · allarme {b['level']}** — {b['text']}")
     for tipo, label in (("portfolio", "Portfolio"), ("watchlist", "Watchlist")):
-        L += ["", f"## {label}", "", "| Titolo | Prezzo | 1g | 5g | News 7g | Utili | Banche |", "|---|---|---|---|---|---|---|"]
+        L += ["", f"## {label}", "", "| Titolo | Prezzo | 1g | 5g | 1m | 6m | 1a | Utili | Banche |",
+              "|---|---|---|---|---|---|---|---|---|"]
         for p in cfg.positions:
             if p.tipo != tipo:
                 continue
             n = ctx["news"].get(p.ticker) or {}
-            d = price(n)
-            cur = CUR.get((d or {}).get("currency", ""), "")
-            nc = news_counts(n)
-            bk = " · ".join(f"{b['bank']} {b['rating']} {b['pt']} {b['dir']}".replace("  ", " ").strip()
-                            for b in banks(n, short, cur)) or "–"
-            L.append(f"| **{p.ticker}** | {fmt_px(d) if d else 'n.d.'} | {fmt_chg((d or {}).get('chg_1d'))[0]} | "
-                     f"{fmt_chg((d or {}).get('chg_5d'))[0]} | {f'▲{nc[0]} ▼{nc[1]} /{nc[2]}' if nc else 'n.d.'} | "
+            d = price(n) or {}
+            cur = CUR.get(d.get("currency", ""), "")
+            bk = " · ".join(bank_text(b) for b in banks(n, short, cur)) or "–"
+            chgs = " | ".join(fmt_chg(d.get(k))[0] for k in ("chg_1d", "chg_5d", "chg_1m", "chg_6m", "chg_1y"))
+            L.append(f"| **{p.ticker}** | {fmt_px(d) if d else 'n.d.'} | {chgs} | "
                      f"{earnings_cell(ctx['earnings'].get(p.ticker))[0]} | {bk} |")
     rows = poly_rows(ctx["polymarket"])
     if rows:
