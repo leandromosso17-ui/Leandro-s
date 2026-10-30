@@ -1,57 +1,49 @@
-"""Run completo di uno slot: tutti i moduli, al massimo 2 chiamate LLM, digest in Markdown/HTML/Notion."""
+"""Run completo di uno slot: moduli attivi in config.yaml, al massimo 2 chiamate LLM, digest HTML/Markdown/Notion."""
 from __future__ import annotations
 
 import csv
 import time
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from intel import llm
 
 
-def _cached_episode(cfg, state, ep) -> dict | None:
-    """Puntata dell'altro slot: solo se già in cache (mai una terza chiamata LLM)."""
-    c = state.get_episode(ep.guid)
-    if not c:
-        return None
-    return {"title": ep.title, "slot": ep.slot, "published": ep.published, "link": ep.link or ep.audio_url, "method": "",
-            "tried": [], "transcript_status": "ok", "summary": {**c["summary"], "_cached": True},
-            "names": {p.ticker: p.nome for p in cfg.positions}}
-
-
-def episodes_for(cfg, state, slot: str, tz, wait: bool) -> tuple[list[dict], str]:
+def latest_episodes(cfg, state, slot: str, tz, wait: bool, day: date | None, budget: int) -> tuple[list[dict], str]:
+    """Le ultime due puntate (una per slot), la più recente prima; con `day`, quelle di quel giorno.
+    `budget` = quante sintesi nuove si possono fare (chiamate LLM)."""
     from collectors.podcast import discover_feed, fetch_episodes
     from intel.cli import _wait_for_episode, process_episode
 
-    note = ""
-    ep = _wait_for_episode(cfg, state, slot, tz) if wait else None
+    if wait and day is None:
+        _wait_for_episode(cfg, state, slot, tz)  # aspetta la puntata di oggi (zero token)
     f = discover_feed(cfg, state)
-    feed = fetch_episodes(cfg, f["data"], limit=6)["data"] if f["status"] == "ok" else []
-    today = datetime.now(tz).date()
-    if not ep:
-        ep = next((e for e in feed or [] if e.slot == slot and e.published.astimezone(tz).date() == today), None)
-    out = []
-    if ep:
-        out.append(process_episode(cfg, state, ep))
+    if f["status"] != "ok":
+        return [], f"Podcast: {f['status']}"
+    res = fetch_episodes(cfg, f["data"], limit=12)
+    if res["status"] != "ok":
+        return [], f"Podcast: {res['status']}"
+    feed = res["data"]
+    if day:
+        chosen = [e for e in feed if e.published.astimezone(tz).date() == day][:2]
     else:
-        note = f"_Puntata {slot} di oggi non ancora disponibile" + \
-               (f" dopo {cfg.section('podcast').get('max_wait_minutes', 120)} minuti di attesa._" if wait else "._")
-    other = "mattina" if slot == "sera" else "sera"
-    prev = next((e for e in feed or [] if e.slot == other), None)
-    if prev:
-        c = _cached_episode(cfg, state, prev)
-        if c:
-            out.append(c)
-        else:
-            note += f"\n_Puntata {other} «{prev.title}» non ancora sintetizzata: esce nel suo run._"
-    # se manca la puntata di oggi, mostra l'ultima dello stesso slot già in cache
-    if not ep:
-        last_same = next((e for e in feed or [] if e.slot == slot), None)
-        c = _cached_episode(cfg, state, last_same) if last_same else None
-        if c:
-            out.append(c)
-            note += f"\n_Mostro l'ultima puntata {slot} già elaborata ({last_same.published:%d/%m})._"
+        chosen = feed[:1]
+        other = next((e for e in feed[1:] if e.slot != feed[0].slot), None) if feed else None
+        chosen += [other] if other else []
+    out, note = [], ""
+    for ep in chosen:
+        if not state.get_episode(ep.guid) or (state.get_episode(ep.guid)["summary"].get("_v") or 0) < _version():
+            if budget <= 0:
+                note += f"Puntata «{ep.title}» non sintetizzata in questo run (limite di 2 chiamate LLM). "
+                continue
+            budget -= 1
+        out.append(process_episode(cfg, state, ep))
     return out, note.strip()
+
+
+def _version() -> int:
+    from analysis.podcast import PROMPT_VERSION
+    return PROMPT_VERSION
 
 
 def _tokens_since(path, since: datetime) -> tuple[int, int, int]:
@@ -67,7 +59,7 @@ def _tokens_since(path, since: datetime) -> tuple[int, int, int]:
     return calls, tin, tout
 
 
-def _sources_md(ctx: dict, run_calls: tuple[int, int, int], week: dict, elapsed: float) -> list[str]:
+def _unavailable(ctx: dict) -> list[str]:
     bad = []
 
     def chk(name, res):
@@ -77,58 +69,42 @@ def _sources_md(ctx: dict, run_calls: tuple[int, int, int], week: dict, elapsed:
     for t, n in ctx["news"].items():
         chk(f"prezzo {t}", n.get("price"))
         chk(f"news {t}", n.get("news"))
-    for t, x in ctx["positioning"].items():
-        for k in ("insiders", "short_interest", "holders", "eu_shorts", "cot"):
-            chk(f"{k} {t}", x.get(k))
     for k, v in ctx["market"].items():
         chk(k, v)
     chk("Polymarket", ctx["polymarket"])
-    for s, f in (ctx.get("reddit_feeds") or {}).items():
-        chk(f"Reddit r/{s}", f)
-    calls, tin, tout = run_calls
-    L = ["- **Fonti usate** Black Box (feed Megaphone, sottotitoli YouTube) · Yahoo Finance (prezzi, analisti, "
-         "utili) · Google News RSS · ApeWisdom · StockTwits · Reddit RSS · ariva.de · CNN Fear & Greed · CBOE · "
-         "xoomar (Form 4, FINRA, 13D/13G) · Consob, BaFin, AFM · CFTC · Polymarket. Ogni dato ha il suo link nel testo.",
-         f"- **Token di questo run** {calls} chiamate LLM, {tin:,} in / {tout:,} out",
-         f"- **Token ultimi 7 giorni** {week['calls']} chiamate, {week['tokens_in']:,} in, {week['tokens_out']:,} out "
-         f"(equivalente API ${week['cost_usd_equiv']:.3f})",
-         f"- **Durata del run** {elapsed / 60:.0f} minuti"]
-    if bad:
-        L += ["- **Non disponibili in questo run**"] + [f"  - {b}" for b in bad[:40]]
-    return L
+    return bad
 
 
-def build(cfg, state, slot: str, wait: bool = True) -> tuple[str, dict]:
+def build(cfg, state, slot: str, wait: bool = True, day: date | None = None) -> dict:
     from analysis import earnings as E
-    from analysis import final as F
-    from analysis import portfolio as PF
-    from analysis import positioning as PO
-    from analysis import retail as R
     from analysis.tickers import analyze_all
+    from collectors import market as MK
     from collectors import polymarket as PM
-    from report import digest as D
 
+    mods = cfg.section("moduli")
     t0, started = time.monotonic(), datetime.now()
     tz = ZoneInfo(cfg.raw.get("timezone", "Europe/Rome"))
-    eps, note = episodes_for(cfg, state, slot, tz, wait)            # chiamata LLM 1 (se non in cache)
-    news = {r["ticker"]: r for r in analyze_all(cfg, state)}        # Modulo 2
-    ret = R.collect(cfg, state)                                     # Modulo 3
-    pos = PO.collect(cfg, state)                                    # Modulo 4
-    print("… Polymarket", flush=True)
-    pm = PM.collect(cfg, state)                                     # Modulo 5
-    earn = E.collect(cfg)                                           # Modulo 6
-    port = PF.collect(cfg, news, earn["profiles"], eps)             # Modulo 7
-    print("… chiamata finale", flush=True)
-    retail_rows = {r["ticker"]: r for r in ret["rows"]}
-    final = F.call(cfg, F.build(cfg, news, retail_rows, pos, earn["rows"], eps, port))  # chiamata LLM 2
-
+    budget = 2 - (1 if mods.get("chiamata_finale") else 0)
+    eps, note = latest_episodes(cfg, state, slot, tz, wait, day, budget)    # chiamate LLM 1-2
+    news = {r["ticker"]: r for r in analyze_all(cfg, state)}                 # Modulo 2
+    print("… mercato e Polymarket", flush=True)
+    market = {"fg": MK.fear_greed(), "vix": MK.vix(), "putcall": MK.putcall()}
+    pm = PM.collect(cfg, state)                                              # Modulo 5
+    earn = E.collect(cfg)                                                    # Modulo 6
     ctx = {"date": datetime.now(tz).date(), "slot": slot, "state": state, "episodes": eps, "podcast_note": note,
-           "news": news, "retail": retail_rows, "reddit_feeds": ret["feeds"], "market": ret["market"],
-           "positioning": pos, "polymarket": pm, "earnings": earn["rows"], "portfolio": port, "final": final}
-    snap = D.snapshot(ctx)
-    ctx["snapshot"] = snap
-    ctx["morning"] = state.get(f"snapshot.{ctx['date']}.mattina") if slot == "sera" else None
-    state.set(f"snapshot.{ctx['date']}.{slot}", snap)
-    ctx["sources_md"] = _sources_md(ctx, _tokens_since(cfg.logs_dir / "tokens.csv", started),
-                                    llm.weekly_totals(cfg.logs_dir / "tokens.csv"), time.monotonic() - t0)
-    return D.render(cfg, ctx), ctx
+           "news": news, "market": market, "polymarket": pm, "earnings": earn["rows"]}
+    # moduli spenti di default (config.yaml, moduli): restano disponibili
+    if mods.get("retail"):
+        from analysis import retail as R
+        ret = R.collect(cfg, state)
+        ctx["retail"] = {r["ticker"]: r for r in ret["rows"]}
+    if mods.get("posizionamento"):
+        from analysis import positioning as PO
+        ctx["positioning"] = PO.collect(cfg, state)
+    if mods.get("portfolio"):
+        from analysis import portfolio as PF
+        ctx["portfolio"] = PF.collect(cfg, news, earn["profiles"], eps)
+    calls, tin, tout = _tokens_since(cfg.logs_dir / "tokens.csv", started)
+    ctx["footer"] = {"calls": calls, "tin": tin, "tout": tout, "week": llm.weekly_totals(cfg.logs_dir / "tokens.csv"),
+                     "minutes": (time.monotonic() - t0) / 60, "unavailable": _unavailable(ctx)}
+    return ctx

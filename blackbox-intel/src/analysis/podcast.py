@@ -8,36 +8,30 @@ import re
 from intel import llm
 
 # Cambia quando cambia lo schema del JSON: le sintesi in cache con un'altra versione si rigenerano.
-PROMPT_VERSION = 4
+PROMPT_VERSION = 5
 
 PROMPT = """Trascrizione della puntata "{title}" ({date}) del podcast Black Box{kind}.
-I marcatori [mm:ss] sono i timestamp.
+I marcatori [mm:ss] sono i timestamp: non riportarli nel JSON.
 
 Titoli che l'ascoltatore ha in portafoglio o in watchlist:
 {assets}
 
 Restituisci questo JSON:
-{{"sintesi": ["5-8 punti, max 30 parole ciascuno"],{tesi}
-  "tuoi_asset": [{{"ticker": "ticker dall'elenco sopra", "timestamp": ["mm:ss"],
-                  "concetti": ["un punto per ogni concetto detto"]}}],
-  "opportunita": [{{"idea": "titolo, settore, paese o tema", "timestamp": "mm:ss",
-                   "cosa_dicono": "2-3 frasi"}}],
+{{"tesi_centrale": "la tesi della puntata in 2 frasi",
+  "sintesi": ["5-8 punti, max 30 parole ciascuno"],
+  "opportunita": [{{"idea": "titolo, settore, paese o tema", "cosa_dicono": "2-3 frasi"}}],
+  "tuoi_asset": [{{"ticker": "ticker dall'elenco sopra", "concetti": ["un punto per ogni concetto detto"]}}],
   "bolla_ai": {{"livello_allarme": "nessuno|basso|medio|alto",
-               "come_la_descrivono": "1-2 frasi: in che fase vedono il ciclo dell'IA",
-               "segnali_di_scoppio": [{{"timestamp": "mm:ss", "concetto": "..."}}],
-               "segnali_di_tenuta": [{{"timestamp": "mm:ss", "concetto": "..."}}]}},
-  "nomi_corretti": [{{"trascritto": "come appare nel testo", "corretto": "nome reale",
-                     "perche": "quale contesto della puntata lo conferma"}}],
-  "non_chiaro": ["passaggi incomprensibili o ambigui, se ce ne sono"]}}
+               "sintesi": "2-3 frasi: secondo gli ospiti la situazione è in allarme o no, e perché",
+               "segnali_di_scoppio": ["max 3, una frase ciascuno"],
+               "segnali_di_tenuta": ["max 3, una frase ciascuno"]}},
+  "dubbi_importanti": ["solo se un passaggio chiave è incomprensibile e cambia il senso di un punto"]}}
 
 La trascrizione viene da sottotitoli automatici: nomi di società, persone e prodotti sono spesso
-storpiati. Quando un nome non torna, confrontalo con nomi reali simili e scegli quello coerente con
-il contesto della puntata (settore, prodotto, numeri, chi ne parla). Se il contesto lo conferma, usa
-il nome corretto in TUTTO il JSON e registra la correzione in "nomi_corretti". Se non sei sicuro,
-lascia il nome come trascritto e segnalalo in "non_chiaro". In "nomi_corretti" metti SOLO i nomi
-che hai davvero cambiato (massimo 10), mai quelli già giusti.
-Questi nomi sono sicuramente corretti, non cambiarli: {glossario}.
-Questa è l'unica eccezione alla regola "niente conoscenze esterne".
+storpiati. Quando un nome non torna, confrontalo con nomi reali simili e usa quello coerente con il
+contesto della puntata (settore, prodotto, numeri, chi ne parla), in TUTTO il JSON. Questa è l'unica
+eccezione alla regola "niente conoscenze esterne". Questi nomi sono sicuramente corretti: {glossario}.
+"dubbi_importanti": quasi sempre vuoto. Non segnalare cifre o nomi minori poco chiari.
 
 "tuoi_asset": solo i titoli dell'elenco di cui si parla, direttamente o tramite il loro paese, settore
 o materia prima (es. Brasile per l'ETF Brasile, rame per l'ETC rame). Qui NON sintetizzare: riporta
@@ -53,9 +47,6 @@ Regole: solo ciò che è detto nella puntata, niente conoscenze esterne. Nessun 
 
 TRASCRIZIONE:
 {text}"""
-
-TESI = '\n  "tesi_centrale": "la tesi della puntata in 2 frasi",'
-
 
 def _assets_block(cfg) -> str:
     return "\n".join(f"- {p.ticker}: {p.nome} ({p.tipo})" for p in cfg.positions)
@@ -78,7 +69,7 @@ def summarize(cfg, state, ep, transcript: str, method: str) -> dict:
     sera = ep.slot == "sera"
     prompt = PROMPT.format(title=ep.title, date=ep.published.strftime("%d/%m/%Y"),
                            kind=" (puntata serale, Guido Brera e Raffaele Coriglione)" if sera else ", Morning Finance",
-                           assets=_assets_block(cfg), tesi=TESI if sera else "",
+                           assets=_assets_block(cfg),
                            glossario=", ".join(cfg.section("podcast").get("glossario") or []),
                            text=transcript[:max_chars])
     max_out = cfg.section("llm").get("max_output_tokens_podcast", 1500)
@@ -99,13 +90,11 @@ def summarize(cfg, state, ep, transcript: str, method: str) -> dict:
         summary = llm.parse_json(res.text)
     except (ValueError, llm.LLMError) as e:
         save_dump(e, res)
-        summary = {"sintesi": [], "non_chiaro": [f"risposta del modello non in JSON ({e}): sintesi non disponibile, "
-                                                 f"risposta grezza in {dump.name}"]}
+        summary = {"sintesi": [], "dubbi_importanti": [f"risposta del modello non in JSON ({e}): sintesi non "
+                                                       f"disponibile, risposta grezza in {dump.name}"]}
     if truncated:
-        summary.setdefault("non_chiaro", []).append(
-            f"trascrizione tagliata a {max_chars} caratteri su {len(transcript)}")
-    summary["nomi_corretti"] = [n for n in summary.get("nomi_corretti") or []
-                                if str(n.get("trascritto", "")).strip().lower() != str(n.get("corretto", "")).strip().lower()]
+        summary.setdefault("dubbi_importanti", []).append(
+            f"trascrizione tagliata a {max_chars} caratteri su {len(transcript)}: la fine della puntata manca")
     if summary.get("sintesi"):
         summary["_v"] = PROMPT_VERSION
         state.save_episode(ep.guid, ep.title, ep.published.isoformat(), ep.slot, method,

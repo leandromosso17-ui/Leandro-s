@@ -42,6 +42,11 @@ def prices(ticker: str) -> dict:
     tz = ZoneInfo(meta.get("exchangeTimezoneName") or "UTC")
     rows = [(ts, c) for ts, c in zip(res.get("timestamp") or [], res["indicators"]["quote"][0].get("close") or [])
             if c is not None]
+    # a volte l'ultima barra giornaliera ha close vuoto (visto su NOW il 30/10/2026): senza
+    # questo si prenderebbe la seduta prima. Il prezzo vero è in regularMarketPrice.
+    rmp, rmt = meta.get("regularMarketPrice"), meta.get("regularMarketTime")
+    if rmp and rmt and rows and datetime.fromtimestamp(rmt, tz).date() > datetime.fromtimestamp(rows[-1][0], tz).date():
+        rows.append((rmt, rmp))
     if len(rows) < 2:
         return unavailable("Yahoo chart: meno di 2 chiusure", url)
     last_ts, last = rows[-1]

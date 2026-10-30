@@ -192,10 +192,56 @@ def _wait_for_episode(cfg, state, slot: str, tz) -> object | None:
         time.sleep(step)
 
 
+def _save_ctx(cfg, ctx: dict, tag: str) -> None:
+    """Dati dell'ultimo run, per `intel ristampa` (rigenera HTML/Markdown senza rete né token)."""
+    import pickle
+    keep = {k: v for k, v in ctx.items() if k != "state"}
+    (cfg.data_dir / "ultimo_run.pickle").write_bytes(pickle.dumps({"tag": tag, "ctx": keep}))
+
+
+def cmd_ristampa(cfg, state, args):
+    import pickle
+
+    from report import digest as D
+    f = cfg.data_dir / "ultimo_run.pickle"
+    if not f.exists():
+        print("Nessun run salvato: lancia prima uv run intel run --slot ...")
+        return 1
+    d = pickle.loads(f.read_bytes())
+    ctx = {**d["ctx"], "state": state}
+    (cfg.data_dir / f"{d['tag']}.md").write_text(D.render_md(cfg, ctx), encoding="utf-8")
+    page = cfg.reports_dir / f"{d['tag']}.html"
+    page.write_text(D.render_html(cfg, ctx), encoding="utf-8")
+    print(f"HTML: {page}")
+    return 0
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        code = ctypes.c_ulong()
+        k.GetExitCodeProcess(h, ctypes.byref(code))
+        k.CloseHandle(h)
+        return code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
 def cmd_run(cfg, state, args):
     tz = ZoneInfo(cfg.raw.get("timezone", "Europe/Rome"))
     today = datetime.now(tz).date().isoformat()
-    if not args.force and (state.run_done(today, args.slot) or state.runs_today(today) >= 2):
+    # un run su un giorno passato (--giorno) è una ristampa: non conta nel limite di 2 al giorno
+    record = not args.giorno
+    if record and not args.force and (state.run_done(today, args.slot) or state.runs_today(today) >= 2):
         print(f"Run {args.slot} di oggi già completato: esco (massimo 2 run al giorno).")
         return 0
     lock = cfg.data_dir / "run.lock"
@@ -203,44 +249,52 @@ def cmd_run(cfg, state, args):
         fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
         age = time.time() - lock.stat().st_mtime
-        if age < 4 * 3600:
+        try:
+            alive = _pid_alive(int(lock.read_text().strip() or 0))
+        except (OSError, ValueError):
+            alive = True
+        # lock orfano: run chiuso con la finestra (il finally non è girato)
+        if age < 4 * 3600 and alive:
             print(f"Un altro run è in corso (lock di {age / 60:.0f} minuti fa): esco.")
             return 0
         lock.unlink()  # lock orfano di un run crashato
         fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     os.write(fd, str(os.getpid()).encode())
     os.close(fd)
-    state.start_run(today, args.slot)
+    if record:
+        state.start_run(today, args.slot)
     status = "error"
     try:
+        from datetime import date as _date
+
         from intel import notify, pipeline
-        from report import html as H
+        from report import digest as D
         from report import notion as N
 
-        md, ctx = pipeline.build(cfg, state, args.slot, wait=not args.no_wait)
-        out = cfg.data_dir / f"{today}-{args.slot}.md"
-        title = f"Market Intel {today} {args.slot}"
-        done = []
+        day = _date.fromisoformat(args.giorno) if args.giorno else None
+        ctx = pipeline.build(cfg, state, args.slot, wait=not args.no_wait, day=day)
+        tag = f"{today}-{args.slot}" + (f"-puntate-{day}" if day else "")
+        _save_ctx(cfg, ctx, tag)
+        md = D.render_md(cfg, ctx)
+        out = cfg.data_dir / f"{tag}.md"
+        out.write_text(md, encoding="utf-8")
+        done = [f"Markdown: {out}"]
         oc = cfg.section("output")
         if oc.get("html", True):
             cfg.reports_dir.mkdir(parents=True, exist_ok=True)
-            page = cfg.reports_dir / f"{today}-{args.slot}.html"
-            page.write_text(H.to_html(md, title), encoding="utf-8")
+            page = cfg.reports_dir / f"{tag}.html"
+            page.write_text(D.render_html(cfg, ctx), encoding="utf-8")
             done.append(f"HTML: {page}")
         if oc.get("notion", True):
-            done.append(N.publish(md, title))
-        md += "\n- **Uscite** " + " · ".join(done) if done else ""
-        out.write_text(md, encoding="utf-8")
-        if oc.get("html", True):  # riscrive l'HTML con la riga delle uscite
-            page.write_text(H.to_html(md, title), encoding="utf-8")
+            done.append(N.publish(md, f"Market Intel {ctx['date']:%d.%m.%Y} {args.slot}"))
         if oc.get("notifica", True):
-            n_flags = len((ctx["final"] or {}).get("tesi_a_rischio") or [])
-            done.append(notify.toast(f"Market Intel {args.slot} pronto",
-                                     f"{len(ctx['episodes'])} puntate · {n_flags} tesi a rischio · {page.name if oc.get('html', True) else out.name}"))
-        print(md + f"\n\nSalvato in {out}\n" + "\n".join(done))
+            first = ctx["episodes"][0]["title"].split(" | ")[0] if ctx["episodes"] else "nessuna puntata"
+            done.append(notify.toast("Market Intel pronto", f"{first[:80]} · {len(ctx['episodes'])} puntate"))
+        print("\n".join(done))
         status = "ok"
     finally:
-        state.finish_run(today, args.slot, status)
+        if record:
+            state.finish_run(today, args.slot, status)
         lock.unlink(missing_ok=True)
     return 0
 
@@ -263,7 +317,9 @@ def main(argv=None):
     r.add_argument("--slot", choices=["mattina", "sera"], required=True)
     r.add_argument("--force", action="store_true", help="ignora il limite di 2 run al giorno (solo per test)")
     r.add_argument("--no-wait", action="store_true", help="non aspettare la puntata di oggi (solo per test)")
+    r.add_argument("--giorno", help="mostra le puntate di questo giorno (AAAA-MM-GG) invece delle ultime due")
     sub.add_parser("tokens", help="totale token degli ultimi 7 giorni")
+    sub.add_parser("ristampa", help="rigenera HTML e Markdown dell'ultimo run (zero rete, zero token)")
     n = sub.add_parser("news", help="Modulo 2: prezzi, news e banche per ogni titolo")
     n.add_argument("--only", help="solo un ticker, es. UBER")
     rt = sub.add_parser("retail", help="Modulo 3: sentiment retail e indicatori di mercato")
@@ -273,7 +329,8 @@ def main(argv=None):
     cfg = config.load()
     state = State(cfg.data_dir / "state.sqlite")
     handler = {"test-sources": cmd_test_sources, "podcast": cmd_podcast,
-               "run": cmd_run, "tokens": cmd_tokens, "news": cmd_news, "retail": cmd_retail}[args.cmd]
+               "run": cmd_run, "tokens": cmd_tokens, "news": cmd_news, "retail": cmd_retail,
+               "ristampa": cmd_ristampa}[args.cmd]
     sys.exit(handler(cfg, state, args) or 0)
 
 

@@ -56,32 +56,34 @@ def search(query: str, must_contain: str | None = None, max_events: int = 3) -> 
 
 
 def collect(cfg, state) -> dict:
-    """Temi da config.yaml più i nomi dei titoli (solo eventi che li citano nel titolo)."""
+    """Solo mercati che toccano portfolio o watchlist: i collegamenti di config.yaml più i nomi
+    dei titoli (eventi che li citano nel titolo). Ogni evento sa a quali titoli si collega e perché."""
     pc = cfg.section("polymarket")
     prev = state.get("polymarket.prev", {})
-    topics = [(t, t, None) for t in pc.get("temi") or []]
-    topics += [(p.nome, p.nome.split(" (")[0], p.nome) for p in cfg.positions
-               if not ((cfg.raw.get("tickers") or {}).get(p.ticker) or {}).get("sottostanti")]
-    seen, groups, errors, now = set(), [], [], {}
-    for label, q, must in topics:
-        res = search(q, must, pc.get("eventi_per_tema", 3))
+    tick_cfg = cfg.raw.get("tickers") or {}
+    topics = [(c["q"], c.get("deve"), c.get("titoli") or [], c.get("perche", "")) for c in pc.get("collegamenti") or []]
+    topics += [(p.nome.split(" (")[0], p.nome.split(" (")[0], [p.ticker], "citato per nome")
+               for p in cfg.positions if not (tick_cfg.get(p.ticker) or {}).get("sottostanti")]
+    by_slug, errors, now = {}, [], {}
+    for q, must, tickers, why in topics:
+        res = search(q, must, pc.get("eventi_per_tema", 2))
         if res["status"] != "ok":
-            errors.append(f"{label}: {res['status']}")
+            errors.append(f"{q}: {res['status']}")
             continue
-        evs = []
         for e in res["data"]:
-            if e["slug"] in seen or e["volume24h"] < pc.get("volume_minimo_24h", 100):
+            if e["volume24h"] < pc.get("volume_minimo_24h", 100):
                 continue
-            seen.add(e["slug"])
+            if e["slug"] in by_slug:  # stesso evento trovato da due ricerche: unisce i titoli
+                by_slug[e["slug"]]["tickers"] = sorted(set(by_slug[e["slug"]]["tickers"]) | set(tickers))
+                continue
             for m in e["markets"]:
                 m["prev"] = prev.get(m["id"])
                 now[m["id"]] = m["p"]
-            evs.append(e)
-        if evs:
-            groups.append({"topic": label, "events": evs})
+            by_slug[e["slug"]] = {**e, "tickers": tickers, "why": why}
     state.set("polymarket.prev", {**prev, **now})
-    if not groups and errors:
+    if not by_slug and errors:
         return unavailable("; ".join(errors), SEARCH)
-    out = ok(groups, "https://polymarket.com/")
+    events = sorted(by_slug.values(), key=lambda e: (e["tickers"] == ["tutti"], -e["volume24h"]))
+    out = ok(events, "https://polymarket.com/")
     out["errors"] = errors
     return out

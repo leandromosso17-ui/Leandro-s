@@ -150,5 +150,31 @@ def test_markdown_outputs():
     assert b[2]["table"]["table_width"] == 2 and len(b[2]["table"]["children"]) == 2
 
 
+def test_digest_render():
+    from datetime import date, datetime, timezone
+    from report.digest import months_to_show, render_html, render_md
+    assert months_to_show(date(2026, 10, 30)) == [(2026, 10), (2026, 11)]
+    assert months_to_show(date(2026, 11, 3)) == [(2026, 11)]
+    pos = [SimpleNamespace(ticker="NOW", nome="ServiceNow", tipo="portfolio"),
+           SimpleNamespace(ticker="PRY.MI", nome="Prysmian", tipo="watchlist")]
+    cfg = SimpleNamespace(positions=pos, raw={"banche": [{"nome": "Evercore ISI", "breve": "Evercore"}]})
+    news = {"NOW": {"price": {"status": "ok", "data": {"last": 110.0, "currency": "USD", "chg_1d": -26.7, "chg_5d": -30.0}},
+                    "news": {"status": "ok", "data": [{"sentiment": "negative"}]},
+                    "banks": {"status": "ok", "top": [{"bank": "Evercore ISI", "direction": "più ribassista",
+                                                       "current": {"rating": "Outperform", "pt": 175.0, "date": date(2026, 10, 29)}}]}}}
+    ep = {"slot": "sera", "title": "La macchina perfetta perde colpi", "link": "",
+          "summary": {"tesi_centrale": "Tesi.", "sintesi": ["a"], "opportunita": [{"idea": "Pharma AI", "cosa_dicono": "x"}],
+                      "tuoi_asset": [{"ticker": "NOW", "concetti": ["cala"]}],
+                      "bolla_ai": {"livello_allarme": "medio", "sintesi": "In allarme moderato."}}}
+    ctx = {"date": date(2026, 10, 30), "episodes": [ep], "podcast_note": "", "news": news,
+           "earnings": {"NOW": {"status": "ok", "next_any": {"date": date(2026, 11, 4), "estimated": False}}},
+           "market": {}, "polymarket": {"status": "ok", "data": []}, "state": SimpleNamespace(recent_episodes=lambda n: []),
+           "footer": {"calls": 2, "tin": 1, "tout": 1, "week": {"tokens_in": 1, "tokens_out": 1}, "minutes": 5, "unavailable": []}}
+    h = render_html(cfg, ctx)
+    assert "MARKET INTEL" in h and "Evercore" in h and "175$" in h and "Pharma AI" in h and 'class="chip conf">NOW' in h
+    m = render_md(cfg, ctx)
+    assert m.startswith("# Market Intel — 30.10.2026") and "Evercore OP 175$ ▼" in m
+
+
 def test_parse_json_fenced():
     assert parse_json('```json\n{"sintesi": ["a"]}\n```') == {"sintesi": ["a"]}

@@ -45,10 +45,28 @@ llm:
 news:
   days: 7   # finestra di Google News per ticker
 
+# Moduli nel digest. Spenti dal 30/10/2026 su richiesta (output più corto): il codice resta.
+moduli:
+  retail: false           # Reddit, StockTwits, forum
+  posizionamento: false   # insider, short, 13D/13G, COT
+  portfolio: false        # correlazioni ed esposizioni
+  chiamata_finale: false  # tesi a rischio, domande, commento utili (seconda chiamata LLM)
+
 polymarket:
-  # temi macro cercati su Polymarket, oltre ai nomi dei titoli (questi solo se il titolo dell'evento li cita)
-  temi: [Fed, tariffs, Brazil, China, copper, recession, Israel, Iran, Ukraine]
-  eventi_per_tema: 3
+  # Solo mercati che toccano i tuoi titoli. q = ricerca su Polymarket, titoli = a chi si collega,
+  # deve = parola che deve stare nel titolo dell'evento (per togliere il rumore).
+  # I nomi dei titoli del CSV si cercano da soli (es. "Uber" -> UBER).
+  collegamenti:
+    - {q: Fed, titoli: [tutti], deve: Fed, perche: tassi USA}
+    - {q: copper, titoli: [COPA.L, PRY.MI], deve: copper, perche: rame e cavi}
+    - {q: Brazil, titoli: [4BRZ.DE], deve: Brazil, perche: Brasile}
+    - {q: Lula, titoli: [4BRZ.DE], deve: Lula, perche: Brasile}
+    - {q: China Taiwan, titoli: [BESI.AS, CLS, SNPS], deve: China, perche: rischio filiera chip}
+    - {q: Nvidia, titoli: [CLS, BESI.AS, SNPS], deve: Nvidia, perche: domanda AI/chip}
+    - {q: SpaceX, titoli: [RKLB], deve: SpaceX, perche: spazio}
+    - {q: quantum, titoli: [RGTI], deve: quantum, perche: quantum}
+    # OpenAI tolto il 30/10/2026: uscivano solo mercati curiosità (bancarotta, premi), nessuna intel su NOW/NET
+  eventi_per_tema: 2
   volume_minimo_24h: 100   # in dollari: sotto, mercato troppo sottile per contare
 
 utili:
@@ -77,24 +95,25 @@ retail:
     DNR.MI: de-nora-spa-aktie
 
 # "Top 3 banche" per titolo: prima queste, nell'ordine; se sono meno di 3 si completa
-# con le case più recenti. alias = come compaiono su Yahoo e nei titoli di news.
+# con le case più recenti. alias = come compaiono su Yahoo e nei titoli di news; breve = nella tabella.
 banche:
-  - {nome: Goldman Sachs, alias: [goldman]}
-  - {nome: Morgan Stanley, alias: []}
-  - {nome: JPMorgan, alias: [jp morgan, j.p. morgan]}
-  - {nome: Bank of America, alias: [b of a securities, bofa, bank of america securities]}
-  - {nome: UBS, alias: []}
-  - {nome: Barclays, alias: []}
-  - {nome: Citi, alias: [citigroup]}
-  - {nome: Deutsche Bank, alias: []}
-  - {nome: BNP Paribas, alias: [bnp paribas exane, exane]}
-  - {nome: HSBC, alias: []}
-  - {nome: Jefferies, alias: []}
-  - {nome: Bernstein, alias: []}
-  - {nome: Wells Fargo, alias: []}
-  - {nome: Mediobanca, alias: []}
-  - {nome: Intesa Sanpaolo, alias: [intesa]}
-  - {nome: Equita, alias: []}
+  - {nome: Goldman Sachs, breve: GS, alias: [goldman]}
+  - {nome: Morgan Stanley, breve: MS, alias: []}
+  - {nome: JPMorgan, breve: JPM, alias: [jp morgan, j.p. morgan]}
+  - {nome: Bank of America, breve: BofA, alias: [b of a securities, bofa, bank of america securities]}
+  - {nome: UBS, breve: UBS, alias: []}
+  - {nome: Barclays, breve: Barclays, alias: []}
+  - {nome: Citi, breve: Citi, alias: [citigroup]}
+  - {nome: Evercore ISI, breve: Evercore, alias: [evercore, evercore isi group]}
+  - {nome: Deutsche Bank, breve: DB, alias: []}
+  - {nome: BNP Paribas, breve: BNP, alias: [bnp paribas exane, exane]}
+  - {nome: HSBC, breve: HSBC, alias: []}
+  - {nome: Jefferies, breve: Jefferies, alias: []}
+  - {nome: Bernstein, breve: Bernstein, alias: []}
+  - {nome: Wells Fargo, breve: WF, alias: []}
+  - {nome: Mediobanca, breve: Mediobanca, alias: []}
+  - {nome: Intesa Sanpaolo, breve: Intesa, alias: [intesa]}
+  - {nome: Equita, breve: Equita, alias: []}
 
 # Collegamenti podcast -> titoli, calcolati in Python (zero token).
 # alias = citazione diretta; temi = toccato da un settore/tema.
