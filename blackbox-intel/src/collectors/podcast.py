@@ -111,7 +111,10 @@ def find_youtube_video(cfg, ep: Episode) -> tuple[str, str] | None:
 
     channel = cfg.section("podcast").get("youtube_channel_url", "").rstrip("/")
     source = f"{channel}/videos" if channel else f"ytsearch10:Black Box Chora {_norm(ep.title)}"
-    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "playlistend": 20, "skip_download": True}
+    # Chora pubblica molti podcast sullo stesso canale: 20 video coprono solo 2-3 giorni di Black Box,
+    # per la settimana intera ne servono di più (lista "flat": pochi KB, nessun download)
+    scan = cfg.section("podcast").get("youtube_scan", 80)
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "playlistend": scan, "skip_download": True}
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(source, download=False)
     best, best_score = None, 0.0

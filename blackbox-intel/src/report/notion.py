@@ -1,8 +1,9 @@
 """Digest -> Notion via API ufficiale, senza token LLM: il Markdown diventa blocchi in Python.
 
-A ogni run: la pagina principale (NOTION_PAGE_ID) viene svuotata e riscritta col digest
-più recente, e sotto di essa si crea una sottopagina datata come archivio. Le
-sottopagine d'archivio non vengono mai cancellate.
+La pagina principale (NOTION_PAGE_ID) è tua e non viene mai toccata. Sotto di essa il
+programma tiene una sottopagina «Digest» che a ogni run viene svuotata e riscritta col
+digest più recente; dentro «Digest» nasce una sottopagina datata come archivio.
+Le sottopagine non vengono mai cancellate.
 """
 from __future__ import annotations
 
@@ -124,16 +125,26 @@ def publish(md: str, title: str) -> str:
     blocks = to_blocks(md)
     try:
         n = Notion(token)
-        # 1. archivio: sottopagina datata
-        sub = n.req("POST", "/pages", json={"parent": {"page_id": page},
+        # 1. la sottopagina «Digest» sotto la tua pagina (creata al primo run)
+        digest = next((b["id"] for b in n.children(page)
+                       if b["type"] == "child_page" and b["child_page"].get("title") == DIGEST_TITLE), None)
+        if not digest:
+            digest = n.req("POST", "/pages", json={
+                "parent": {"page_id": page}, "icon": {"type": "emoji", "emoji": "📰"},
+                "properties": {"title": {"title": [{"text": {"content": DIGEST_TITLE}}]}}})["id"]
+        # 2. archivio: sottopagina datata dentro «Digest»
+        sub = n.req("POST", "/pages", json={"parent": {"page_id": digest},
                                             "properties": {"title": {"title": [{"text": {"content": title}}]}},
                                             "children": blocks[:BATCH]})
         n.append(sub["id"], blocks[BATCH:])
-        # 2. pagina principale: via i blocchi vecchi (non le sottopagine), dentro il digest nuovo
-        for b in n.children(page):
+        # 3. «Digest»: via i blocchi vecchi (non le sottopagine d'archivio), dentro il digest nuovo
+        for b in n.children(digest):
             if b["type"] != "child_page":
                 n.req("DELETE", f"/blocks/{b['id']}")
-        n.append(page, blocks)
+        n.append(digest, blocks)
     except Exception as e:  # noqa: BLE001
         return f"Notion: errore ({str(e)[:200]})"
-    return f"Notion: pagina aggiornata e archivio «{title}» creato"
+    return f"Notion: «{DIGEST_TITLE}» aggiornata e archivio «{title}» creato"
+
+
+DIGEST_TITLE = "Digest"

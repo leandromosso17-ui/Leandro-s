@@ -90,11 +90,13 @@ def render_episode_md(r: dict) -> str:
     b = s.get("bolla_ai") or {}
     if b:
         L += ["", f"**🫧 Bolla AI — allarme degli ospiti: {b.get('livello_allarme', '?')}**"]
-        if b.get("come_la_descrivono"):
-            L.append(b["come_la_descrivono"])
+        if b.get("sintesi") or b.get("come_la_descrivono"):
+            L.append(b.get("sintesi") or b["come_la_descrivono"])
         for label, key in (("Segnali di scoppio", "segnali_di_scoppio"), ("Segnali di tenuta", "segnali_di_tenuta")):
             if b.get(key):
-                L += ["", f"_{label}_"] + [f"- ({x.get('timestamp', '')}) {x.get('concetto', '')}" for x in b[key]]
+                # prompt v5: frasi semplici; prima: {timestamp, concetto}
+                L += ["", f"_{label}_"] + [f"- {x}" if isinstance(x, str) else
+                                           f"- ({x.get('timestamp', '')}) {x.get('concetto', '')}" for x in b[key]]
     # controllo incrociato senza token: nomi trovati nel testo dal Python
     direct = [k for k in r.get("links") or [] if k["tipo"] == "citato direttamente"]
     if direct:
@@ -104,8 +106,8 @@ def render_episode_md(r: dict) -> str:
         L += ["", "_Nomi corretti rispetto ai sottotitoli: " + "; ".join(
             f"«{n.get('trascritto', '')}» → **{n.get('corretto', '')}** ({n.get('perche', '')})"
             for n in s["nomi_corretti"]) + "_"]
-    if s.get("non_chiaro"):
-        L += ["", "**Non chiaro / limiti:** " + "; ".join(s["non_chiaro"])]
+    if s.get("non_chiaro") or s.get("dubbi_importanti"):
+        L += ["", "**Non chiaro / limiti:** " + "; ".join(s.get("dubbi_importanti") or s["non_chiaro"])]
     if s:
         L.append("")
         L.append("_Token: da cache, 0_" if s.get("_cached")
@@ -209,6 +211,10 @@ def cmd_ristampa(cfg, state, args):
         return 1
     d = pickle.loads(f.read_bytes())
     ctx = {**d["ctx"], "state": state}
+    # puntate sintetizzate dopo il run (es. intel podcast --last N): prende le sintesi dalla cache
+    for e in ctx.get("week") or []:
+        if not e.get("summary"):
+            e["summary"] = state.summary_by_title(e["title"])
     (cfg.data_dir / f"{d['tag']}.md").write_text(D.render_md(cfg, ctx), encoding="utf-8")
     page = cfg.reports_dir / f"{d['tag']}.html"
     page.write_text(D.render_html(cfg, ctx), encoding="utf-8")

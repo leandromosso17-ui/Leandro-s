@@ -48,6 +48,11 @@ class State:
         d["summary"] = json.loads(d.pop("summary_json"))
         return d
 
+    def summary_by_title(self, title: str) -> dict | None:
+        row = self.db.execute("select summary_json from episodes where title=? and summary_json is not null",
+                              (title,)).fetchone()
+        return json.loads(row["summary_json"]) if row else None
+
     def recent_episodes(self, n: int = 10) -> list[dict]:
         """Ultime n puntate sintetizzate, dalla più vecchia alla più recente."""
         rows = self.db.execute(
