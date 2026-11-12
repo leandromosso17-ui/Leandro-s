@@ -20,10 +20,11 @@ def latest_episodes(cfg, state, slot: str, tz, wait: bool, day: date | None, bud
     f = discover_feed(cfg, state)
     if f["status"] != "ok":
         return [], f"Podcast: {f['status']}"
-    res = fetch_episodes(cfg, f["data"], limit=12)
+    res = fetch_episodes(cfg, f["data"], limit=24)
     if res["status"] != "ok":
         return [], f"Podcast: {res['status']}"
     feed = res["data"]
+    _FEED_CACHE["feed"] = feed
     if day:
         chosen = [e for e in feed if e.published.astimezone(tz).date() == day][:2]
     else:
@@ -39,6 +40,29 @@ def latest_episodes(cfg, state, slot: str, tz, wait: bool, day: date | None, bud
             budget -= 1
         out.append(process_episode(cfg, state, ep))
     return out, note.strip()
+
+
+_FEED_CACHE: dict = {}
+
+
+def week_episodes(cfg, state, processed: list[dict], tz, days: int = 7) -> list[dict]:
+    """Tutte le puntate uscite negli ultimi `days` giorni, con la sintesi se è in cache.
+    Niente chiamate LLM: quelle non ancora sintetizzate restano senza sintesi."""
+    today = datetime.now(tz).date()
+    done = {(p["title"], p["published"]): p for p in processed}
+    out = []
+    for ep in _FEED_CACHE.get("feed") or []:
+        d = ep.published.astimezone(tz).date()
+        if (today - d).days >= days:
+            continue
+        if (ep.title, ep.published) in done:
+            item = done[(ep.title, ep.published)]
+        else:
+            c = state.get_episode(ep.guid)
+            item = {"title": ep.title, "slot": ep.slot, "published": ep.published,
+                    "link": ep.link or ep.audio_url, "summary": c["summary"] if c else None}
+        out.append({**item, "day": d})
+    return out
 
 
 def _version() -> int:
@@ -92,6 +116,7 @@ def build(cfg, state, slot: str, wait: bool = True, day: date | None = None) -> 
     pm = PM.collect(cfg, state)                                              # Modulo 5
     earn = E.collect(cfg)                                                    # Modulo 6
     ctx = {"date": datetime.now(tz).date(), "slot": slot, "state": state, "episodes": eps, "podcast_note": note,
+           "week": week_episodes(cfg, state, eps, tz),
            "news": news, "market": market, "polymarket": pm, "earnings": earn["rows"]}
     # moduli spenti di default (config.yaml, moduli): restano disponibili
     if mods.get("retail"):

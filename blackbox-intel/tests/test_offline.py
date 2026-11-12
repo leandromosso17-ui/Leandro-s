@@ -174,6 +174,14 @@ def test_digest_render():
            "footer": {"calls": 2, "tin": 1, "tout": 1, "week": {"tokens_in": 1, "tokens_out": 1}, "minutes": 5, "unavailable": []}}
     h = render_html(cfg, ctx)
     assert "MARKET INTEL" in h and "Evercore" in h and "175$" in h and "Pharma AI" in h and 'class="chip conf">NOW' in h
+    # selettore dei 7 giorni: il 30/10 ha la sintesi, il 29/10 una puntata non ancora sintetizzata
+    pub = datetime(2026, 10, 30, 18, 0, tzinfo=timezone.utc)
+    ctx["week"] = [{**ep, "published": pub, "day": date(2026, 10, 30)},
+                   {"title": "Morning | Morning Finance", "slot": "mattina", "link": "", "summary": None,
+                    "published": datetime(2026, 10, 29, 6, 0, tzinfo=timezone.utc), "day": date(2026, 10, 29)}]
+    h = render_html(cfg, ctx)
+    assert h.count("<button data-day=") == 7 and '<button data-day="2026-10-30" class="on">' in h
+    assert '<div class="day" data-day="2026-10-29" hidden>' in h and "non ancora sintetizzata" in h
     m = render_md(cfg, ctx)
     assert m.startswith("# Market Intel — 30.10.2026")
     assert "Evercore OP 175$ (29.10.26) ← 160$ (01.07.26) +9.4%" in m

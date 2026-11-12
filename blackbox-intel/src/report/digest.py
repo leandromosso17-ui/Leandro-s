@@ -211,6 +211,14 @@ aside{min-width:0}@media(max-width:980px){aside{max-width:420px}}
 .mk{font-size:12px}.mk div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)}
 .poly td{white-space:normal}.pct{font:600 13px Consolas,monospace;color:#fff}
 footer{color:var(--dim);font:11px Consolas,monospace;margin-top:8px}footer details{margin-top:4px}
+.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:0 0 12px}
+.days button{background:var(--panel);border:1px solid var(--line);color:var(--dim);padding:7px 4px;cursor:pointer;
+  font:12px Consolas,monospace;text-align:center}.days button b{display:block;color:var(--fg);font-weight:600}
+.days button.on{border-color:var(--amber);color:var(--amber)}.days button.on b{color:var(--amber)}
+.days button.empty{opacity:.45}.days span{display:block;margin-top:3px;line-height:0}
+.dot{display:inline-block;width:6px;height:6px;margin:0 2px;border:1px solid var(--dim);border-radius:50%}
+.dot.on{background:var(--amber);border-color:var(--amber)}.dot.none{border-color:transparent}
+code{font:12px Consolas,monospace;color:var(--fg)}
 """
 
 
@@ -357,15 +365,60 @@ def h_market(ctx: dict) -> str:
     return f'<p class="k">Mercato</p><div class="mk">{body or "n.d."}</div>'
 
 
+GIORNI = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+
+WEEK_JS = """<script>
+document.querySelectorAll('.days button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.days button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.day').forEach(p => p.hidden = p.dataset.day !== b.dataset.day);
+}));
+</script>"""
+
+
+def h_week(cfg, ctx: dict, names: dict) -> str:
+    """Ultimi 7 giorni del podcast, un pannello per giorno, la sera prima della mattina."""
+    today = ctx["date"]
+    days = [today - timedelta(days=i) for i in range(7)]
+    by_day: dict[date, list[dict]] = {}
+    for ep in ctx["week"]:
+        by_day.setdefault(ep["day"], []).append(ep)
+    for d in by_day:
+        by_day[d].sort(key=lambda e: e["published"], reverse=True)
+    # giorno aperto all'inizio: il più recente con almeno una sintesi, altrimenti con una puntata
+    start = next((d for d in days if any(e.get("summary") for e in by_day.get(d, []))),
+                 next((d for d in days if by_day.get(d)), today))
+    tabs, panels = [], []
+    for d in days:
+        eps = by_day.get(d, [])
+        n_ok = sum(1 for e in eps if e.get("summary"))
+        dots = "".join('<i class="dot on"></i>' if e.get("summary") else '<i class="dot"></i>' for e in eps) or '<i class="dot none"></i>'
+        tabs.append(f'<button data-day="{d}" class="{"on" if d == start else ""}{" empty" if not eps else ""}">'
+                    f'{GIORNI[d.weekday()]} <b>{d:%d.%m}</b><span>{dots}</span></button>')
+        if not eps:
+            body = '<section><p class="note">Nessuna puntata uscita questo giorno.</p></section>'
+        else:
+            done = [e for e in eps if e.get("summary")]
+            body = "".join(h_episode(e) if e.get("summary") else
+                           f'<section><p class="k">{SLOT.get(e["slot"], e["slot"])} · Black Box</p><h2>{esc(e["title"].split(" | ")[0])}</h2>'
+                           f'<p class="note">Uscita ma non ancora sintetizzata: le sintesi si fanno 2 per run. '
+                           f'Per recuperarla: <code>uv run intel podcast --last 14</code></p></section>' for e in eps)
+            if done:
+                body += h_assets(done, names) + h_bubble(done)
+        panels.append(f'<div class="day" data-day="{d}"{"" if d == start else " hidden"}>{body}</div>')
+    return f'<nav class="days">{"".join(tabs)}</nav>{"".join(panels)}'
+
+
 def render_html(cfg, ctx: dict) -> str:
     names = {p.ticker: p.nome for p in cfg.positions}
     short = {b["nome"]: b.get("breve", b["nome"]) for b in cfg.raw.get("banche") or []}
     eps = ctx["episodes"]
     f = ctx["footer"]
-    main = "".join(h_episode(e) for e in eps)
+    if ctx.get("week") is not None:
+        main = h_week(cfg, ctx, names)
+    else:  # run salvati prima del selettore dei 7 giorni
+        main = "".join(h_episode(e) for e in eps) + h_assets(eps, names) + h_bubble(eps)
     if ctx.get("podcast_note"):
         main += f'<p class="note">{esc(ctx["podcast_note"])}</p>'
-    main += h_assets(eps, names) + h_bubble(eps)
     main += h_table(cfg, "portfolio", ctx, short) + h_table(cfg, "watchlist", ctx, short) + h_poly(ctx)
     unav = f["unavailable"]
     main += (f'<footer>{f["calls"]} chiamate LLM · {f["tin"]:,} in / {f["tout"]:,} out · settimana {f["week"]["tokens_in"]:,} in / '
@@ -376,7 +429,7 @@ def render_html(cfg, ctx: dict) -> str:
     return (f'<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>Market Intel {ctx["date"]:%d.%m.%Y}</title><style>{CSS}</style></head><body>'
             f'<header><h1>MARKET INTEL</h1><span class="date">{ctx["date"]:%d.%m.%Y}</span></header>'
-            f'<div class="wrap"><main>{main}</main><aside>{aside}</aside></div></body></html>')
+            f'<div class="wrap"><main>{main}</main><aside>{aside}</aside></div>{WEEK_JS}</body></html>')
 
 
 # --- Markdown (Notion e archivio) -----------------------------------------------------
